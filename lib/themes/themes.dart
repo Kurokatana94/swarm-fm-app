@@ -1,0 +1,64 @@
+import 'package:swarm_fm_app/palettes/palettes.dart';
+
+Map themes = {
+  'neuro': {
+    'name': 'Neuro',
+    'icon': 'assets/images/icons/neuro-cog.svg',
+    'logo': 'assets/images/neuro-logo.png',
+    // drawer
+    'settings_header': neuroDarkRed,
+    'settings_bg': lightBeige,
+    'settings_title': neuroDarkRed,
+    'settings_text': neuroDarkRed,
+    'settings_icons': null,
+    // main app
+    'animated_icons': neuroDarkPink,
+    'app_bar_bg': brightPink,
+    'app_bar_fg': pinkBeije,
+    'main_bg': pinkBeije,
+    'title_outline': darkPurple,
+    'title_fill': pinkBeije,
+    'control_icons': darkPurple,
+    'player_controls': darkPurple,
+  },
+  'evil': {
+    'name': 'Evil',
+    'icon': 'assets/images/icons/evil-cog.svg',
+    'logo': 'assets/images/evil-logo.png',
+    // drawer
+    'settings_header': evilBlack,
+    'settings_bg': evilDarkRed,
+    'settings_title': white,
+    'settings_text': white,
+    'settings_icons': null,
+    // main app
+    'animated_icons': evilDarkPink,
+    'app_bar_bg': evilBlack,
+    'app_bar_fg': evilRed,
+    'main_bg': evilRed,
+    'title_outline': evilBlack,
+    'title_fill': evilDarkPink,
+    'control_icons': evilDarkPink,
+    'player_controls': evilBlack,
+  },
+  'vedal': {
+    'name': 'Vedal',
+    'icon': 'assets/images/icons/vedal-cog.svg',
+    'logo': 'assets/images/vedal-logo.png',
+    // drawer
+    'settings_header': vedalDarkGreen,
+    'settings_bg': vedalLightGreen,
+    'settings_title': vedalPurple,
+    'settings_text': vedalPurple,
+    'settings_icons': null,
+    // main app
+    'animated_icons': vedalLightGreen,
+    'app_bar_bg': vedalPurple,
+    'app_bar_fg': vedalGreen,
+    'main_bg': vedalGreen,
+    'title_outline': vedalDarkPurple,
+    'title_fill': vedalLightGreen,
+    'control_icons': vedalDarkPurple,
+    'player_controls': vedalDarkGreen,
+  },
+};
