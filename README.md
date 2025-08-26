@@ -1,2 +1,9 @@
-# swarm_fm_app
+# SwarmFM App
+
 A Flutter app to listen SwarmFM on the go
+
+
+## License
+
+- Code: Licensed under the [MIT License](./LICENSE).  
+- Assets: Certain artwork and other media are licensed separately for **non-commercial use only** (see [assets/LICENSE](./assets/LICENSE)).  
