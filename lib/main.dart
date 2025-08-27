@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:audio_session/audio_session.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:swarm_fm_app/packages/animations.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -11,26 +14,152 @@ bool isNeuroTheme = true;
 bool isEvilTheme = false;
 bool isVedalTheme = false;
 
-void main() {
+late AudioHandler _audioHandler;
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(MyApp());
+
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+  await loadThemeState();
+
+  _audioHandler = await AudioService.init(
+    builder: () => AudioPlayerHandler(),
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.swarm.swarmfm.channel.audio',
+      androidNotificationChannelName: 'Swarm FM',
+      androidNotificationOngoing: true,
+      androidNotificationClickStartsActivity: true,
+    ),
+  );
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Swarm FM Player',
-      theme: ThemeData(
-        fontFamily: 'First Coffee',
-      ),
+      theme: ThemeData(fontFamily: 'First Coffee'),
       debugShowCheckedModeBanner: false,
       home: const SwarmFMPlayerPage(),
     );
   }
 }
+
+class MediaState {
+  final MediaItem? mediaItem;
+  final Duration position;
+
+  MediaState(this.mediaItem, this.position);
+}
+
+/// An [AudioHandler] for playing a single item.
+class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
+  static final _item = MediaItem(
+    id: getStreamUrl(),
+    title: "Swarm FM",
+    artUri: Uri.parse('asset:///assets/images/swarm-fm-icon.png'),
+  );
+
+  final _player = AudioPlayer();
+
+  AudioPlayerHandler() {
+    // Broadcast player state to AudioService
+    _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
+
+    // Broadcast current media item (needed for notification)
+    mediaItem.add(_item);
+
+    // Load the audio source
+    _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+
+        // Listen for idle/failure states and auto-restart
+    
+    _player.playingStream.listen((isPlaying) {
+      if (isPlaying) {
+        WakelockPlus.enable();
+      } else {
+        WakelockPlus.disable();
+      }
+    });
+
+    _player.playerStateStream.listen((playerState) async {
+      if (playerState.processingState == ProcessingState.completed) {
+        await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+        await _player.play();
+      }
+    });
+
+    _player.playbackEventStream.listen((_) {},
+      onError: (Object e, StackTrace stack) async {
+        print('Playback error: $e');
+        while(!_player.playing){
+          try {
+            await _player.setUrl(getStreamUrl(), preload: false);
+            await _player.play();
+          } catch (e) {
+            await Future.delayed(const Duration(seconds: 1));
+            print('Retry failed: $e');
+          }
+        }
+      }
+    );
+  }
+
+  @override
+  Future<void> play() async => await _player.play();
+
+  @override
+  Future<void> pause() async {
+    await _player.pause();
+  }
+
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> stop() async {
+    await _player.stop();
+    return super.stop();
+  }
+
+  @override
+  Future<void> onTaskRemoved() async {
+    await _player.dispose();
+    return super.onTaskRemoved();
+  }
+
+  PlaybackState _transformEvent(PlaybackEvent event) {
+    return PlaybackState(
+      controls: [
+        MediaControl.rewind,
+        if (_player.playing) MediaControl.pause else MediaControl.play,
+        MediaControl.stop,
+        MediaControl.fastForward,
+      ],
+      systemActions: const {
+        MediaAction.seek,
+        MediaAction.seekForward,
+        MediaAction.seekBackward,
+      },
+      androidCompactActionIndices: const [0, 1, 3],
+      processingState: const {
+        ProcessingState.idle: AudioProcessingState.idle,
+        ProcessingState.loading: AudioProcessingState.loading,
+        ProcessingState.buffering: AudioProcessingState.buffering,
+        ProcessingState.ready: AudioProcessingState.ready,
+        ProcessingState.completed: AudioProcessingState.completed,
+      }[_player.processingState]!,
+      playing: _player.playing,
+      speed: _player.speed,
+      queueIndex: event.currentIndex,
+    );
+  }
+}
+
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends StatefulWidget {
@@ -39,95 +168,8 @@ class SwarmFMPlayerPage extends StatefulWidget {
   State<SwarmFMPlayerPage> createState() => _SwarmFMPlayerPageState();
 }
 
-String getStreamUrl() {
-  return 'https://customer-x1r232qaorg7edh8.cloudflarestream.com/3a05b1a1049e0f24ef1cd7b51733ff09/manifest/stream_te93df10225cf5ea1c56ba39279850256_r1172253216.m3u8';
-}
-
 // Main Player Page Active State ------------------------------------------------
 class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
-  late final AudioPlayer _player;
-  final String streamurl = getStreamUrl();
-
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_initialized) return; // prevent double run
-    _initialized = true;
-
-    _player = AudioPlayer();
-    _player.playerStateStream.listen(_onPlayerStateChanged);
-    _player.playbackEventStream.handleError((error, stack) {
-      print("Playback error: $error");
-      _retry();
-    });
-
-    _setupAudio();
-  }
-
-  void _onPlayerStateChanged(PlayerState state) async {
-    if (state.processingState == ProcessingState.buffering &&
-        state.playing &&
-        _player.bufferedPosition < _player.position) {
-      print("⚠️ Buffer underrun → resyncing to live edge");
-      try {
-        await _player.seek(Duration.zero, index: _player.effectiveIndices.last);
-      } catch (e) {
-        print("Resync failed: $e");
-      }
-    } else if (state.processingState == ProcessingState.idle && !_player.playing) {
-      _retry();
-    }
-  }
-
-  bool _retrying = false;
-
-  Future<void> _retry([int delay = 3]) async {
-    if (_retrying) return; // prevent multiple overlapping retries
-    _retrying = true;
-
-    print("Retrying in $delay seconds...");
-    await Future.delayed(Duration(seconds: delay));
-    try {
-      await _player.setUrl(streamurl); // try plain setUrl first
-      await _player.play();
-    } catch (e) {
-      print("Retry failed: $e");
-      _retrying = false;
-      _retry(delay * 2); // exponential backoff
-      return;
-    }
-    _retrying = false;
-  }
-
-  Future<void> _setupAudio() async {
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
-
-    try {
-      await _player.setAudioSource(HlsAudioSource(Uri.parse(streamurl)), preload: true);
-
-      // Wait until some data is buffered
-      while (_player.bufferedPosition < const Duration(seconds: 1)) {
-        await Future.delayed(const Duration(milliseconds: 200));
-      }
-
-      await _player.play();
-    } catch (e) {
-      print("Error loading audio source: $e");
-      _retry();
-    }
-  }
-
-  @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
-  }
-
-
-  // TODO Add player decorations, like cogs and gifs
   // Build the UI ------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -207,7 +249,9 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
                   isNeuroTheme = true;
                   isEvilTheme = false;
                   isVedalTheme = false;
-                  changeTheme('neuro');
+                  String name = 'neuro';
+                  changeTheme(name);
+                  saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
                 });
               },
             ),
@@ -228,7 +272,9 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
                   isNeuroTheme = false;
                   isEvilTheme = true;
                   isVedalTheme = false;
-                  changeTheme('evil');
+                  String name = 'evil';
+                  changeTheme(name);
+                  saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
                 });
               },
             ),
@@ -249,7 +295,9 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
                   isNeuroTheme = false;
                   isEvilTheme = false;
                   isVedalTheme = true;
-                  changeTheme('vedal');
+                  String name = 'vedal';
+                  changeTheme(name);
+                  saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
                 });
               },
             ),
@@ -280,8 +328,8 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
           Positioned(
             left: 310,
             top: -90,
-            child: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+            child: StreamBuilder<PlaybackState>(
+              stream: _audioHandler.playbackState,
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
                 final playing = playerState?.playing ?? false;
@@ -307,11 +355,11 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
           Positioned(
             left: 221,
             top: -31,
-            child: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+            child: StreamBuilder<PlaybackState>(
+              stream: _audioHandler.playbackState,
               builder: (context, snapshot) {
-                final playerState = snapshot.data;
-                final playing = playerState?.playing ?? false;
+                final playbackState = snapshot.data;
+                final playing = playbackState?.playing ?? false;
 
                 return RotatingCog(
                   isSpinning: playing, // starts/stops with the music
@@ -334,8 +382,8 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
           Positioned(
             left: 115,
             top: -50,
-            child: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+            child: StreamBuilder<PlaybackState>(
+              stream: _audioHandler.playbackState,
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
                 final playing = playerState?.playing ?? false;
@@ -361,8 +409,8 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
           Positioned(
             left: -140,
             top: 570,
-            child: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+            child: StreamBuilder<PlaybackState>(
+              stream: _audioHandler.playbackState,
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
                 final playing = playerState?.playing ?? false;
@@ -387,8 +435,8 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
           Positioned(
             left: 40,
             top: 700,
-            child: StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
+            child: StreamBuilder<PlaybackState>(
+              stream: _audioHandler.playbackState,
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
                 final playing = playerState?.playing ?? false;
@@ -417,15 +465,15 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
               children: <Widget>[               
                 Image.asset(activeTheme['logo']),
 
-                StreamBuilder<PlayerState>(
-                  stream: _player.playerStateStream,
+                StreamBuilder<PlaybackState>(
+                  stream: _audioHandler.playbackState,
                   builder: (context, snapshot) {
                     final playerState = snapshot.data;
                     final processingState = playerState?.processingState;
                     final playing = playerState?.playing;
 
-                    if (processingState == ProcessingState.loading ||
-                        processingState == ProcessingState.buffering) {
+                    if (processingState == AudioProcessingState.loading ||
+                        processingState == AudioProcessingState.buffering) {
                       return CircularProgressIndicator(
                         color: activeTheme['player_controls'],
                       );
@@ -435,27 +483,29 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
                         iconSize: 64.0,
                         color: activeTheme['player_controls'],
                         onPressed: () async {
-                          await _setupAudio();
+                          await _audioHandler.play();
                         },
                       );
-                    } else if (processingState != ProcessingState.completed) {
+                    } else if (processingState == AudioProcessingState.ready && playing == true) {
                       return IconButton(
                         icon: const Icon(Icons.pause),
                         iconSize: 64.0,
                         color: activeTheme['player_controls'],
                         onPressed: () async{
-                          await _player.pause();
+                          await _audioHandler.pause();
                         },
-
                       );
                     } else {
-                      return IconButton(
-                        icon: const Icon(Icons.replay),
-                        iconSize: 64.0,
+                      try {
+                          _audioHandler.stop(); // stop current playback
+                          _audioHandler.play();
+                        } catch (e) {
+                          print('Failed to restart stream: $e');
+                        }
+                      }
+                      return CircularProgressIndicator(
                         color: activeTheme['player_controls'],
-                        onPressed: () => _player.seek(Duration.zero),
                       );
-                    }
                   },
                 ),
               ],
@@ -501,9 +551,37 @@ List<Text> outlineFormatter(String text, int outlineWidth, Color outlineColor, C
   return outlines;
 }
 
+// Function to change the active theme
 void changeTheme(String themeName) {
-  // Function to change the active theme
   if (themes.containsKey(themeName)) {
     activeTheme = themes[themeName];
   }
+}
+
+// It simply returns the active stream url, but in future might change depending on how the system evolves
+String getStreamUrl() {
+  return 'https://customer-x1r232qaorg7edh8.cloudflarestream.com/3a05b1a1049e0f24ef1cd7b51733ff09/manifest/stream_te93df10225cf5ea1c56ba39279850256_r1172253216.m3u8';
+}
+
+// Themes saving
+Future<void> saveThemeState(String themeName, bool isNeuro, bool isEvil, bool isVedal) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setString('activeTheme', themeName);
+  await prefs.setBool('isNeuroTheme', isNeuro);
+  await prefs.setBool('isEvilTheme', isEvil);
+  await prefs.setBool('isVedalTheme', isVedal);
+}
+
+// Theme loading
+Future<void> loadThemeState() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  String themeName = prefs.getString('activeTheme') ?? 'neuro';
+
+  isNeuroTheme = prefs.getBool('isNeuroTheme') ?? true;
+  isEvilTheme = prefs.getBool('isEvilTheme') ?? false;
+  isVedalTheme = prefs.getBool('isVedalTheme') ?? false;
+
+  activeTheme = themes[themeName];
 }
