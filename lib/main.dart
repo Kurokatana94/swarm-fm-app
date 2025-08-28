@@ -3,10 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:swarm_fm_app/themes/themes.dart';
-import 'package:swarm_fm_app/packages/animations.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:swarm_fm_app/themes/themes.dart';
+import 'package:swarm_fm_app/packages/animations.dart';
+import 'package:swarm_fm_app/packages/popup.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -23,20 +24,27 @@ Future<void> main() async {
 
   await loadThemeState();
 
+  
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  bool? isFirstLaunch = prefs.getBool('isFirstLaunch') ?? true;
+
   _audioHandler = await AudioService.init(
     builder: () => AudioPlayerHandler(),
     config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.swarm.swarmfm.channel.audio',
+      androidNotificationChannelId: 'com.kurokatana94.swarmfm.channel.audio',
       androidNotificationChannelName: 'Swarm FM',
+      androidNotificationIcon: "assets/images/swarm-fm-icon",
+      androidShowNotificationBadge: true,
       androidNotificationOngoing: true,
       androidNotificationClickStartsActivity: true,
     ),
   );
-  runApp(const MyApp());
+  runApp(MyApp(isFirstLaunch: isFirstLaunch,));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool isFirstLaunch;
+  const MyApp({super.key, required this.isFirstLaunch});
   
   @override
   Widget build(BuildContext context) {
@@ -44,7 +52,7 @@ class MyApp extends StatelessWidget {
       title: 'Swarm FM Player',
       theme: ThemeData(fontFamily: 'First Coffee'),
       debugShowCheckedModeBanner: false,
-      home: const SwarmFMPlayerPage(),
+      home: SwarmFMPlayerPage(isFirstLaunch: isFirstLaunch,),
     );
   }
 }
@@ -163,13 +171,24 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends StatefulWidget {
-  const SwarmFMPlayerPage({super.key});
+  final bool isFirstLaunch;
+  const SwarmFMPlayerPage({super.key, required this.isFirstLaunch});
   @override
   State<SwarmFMPlayerPage> createState() => _SwarmFMPlayerPageState();
 }
 
 // Main Player Page Active State ------------------------------------------------
 class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
+  @override
+  void initState() {
+  super.initState();
+
+    if (widget.isFirstLaunch) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showBatterySettingsPopup(context);
+      });
+    }
+  }
   // Build the UI ------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -560,7 +579,7 @@ void changeTheme(String themeName) {
 
 // It simply returns the active stream url, but in future might change depending on how the system evolves
 String getStreamUrl() {
-  return 'https://customer-x1r232qaorg7edh8.cloudflarestream.com/3a05b1a1049e0f24ef1cd7b51733ff09/manifest/stream_te93df10225cf5ea1c56ba39279850256_r1172253216.m3u8';
+  return 'https://customer-x1r232qaorg7edh8.cloudflarestream.com/3a05b1a1049e0f24ef1cd7b51733ff09/manifest/video.m3u8';
 }
 
 // Themes saving

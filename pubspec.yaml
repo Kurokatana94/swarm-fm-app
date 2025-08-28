@@ -44,6 +44,7 @@ dependencies:
   android_intent_plus: ^5.3.1
   device_info_plus: ^11.5.0
   shared_preferences: ^2.5.3
+  app_settings: ^6.1.1
 
 dev_dependencies:
   flutter_test:

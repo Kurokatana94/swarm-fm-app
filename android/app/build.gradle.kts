@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.swarm_fm_app"
+    namespace = "com.kurokatana94.swarmfm.channel.audio"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.swarm_fm_app"
+        applicationId = "com.kurokatana94.swarmfm.channel.audio"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
