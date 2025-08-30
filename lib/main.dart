@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:swarm_fm_app/packages/animations.dart';
 import 'package:swarm_fm_app/packages/popup.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -22,23 +23,29 @@ Future<void> main() async {
 
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
+  var status = await Permission.notification.status;
+  if (status.isDenied) {
+    await Permission.notification.request();
+  }
+
   await loadThemeState();
 
   
   SharedPreferences prefs = await SharedPreferences.getInstance();
   bool? isFirstLaunch = prefs.getBool('isFirstLaunch') ?? true;
-
+  
   _audioHandler = await AudioService.init(
     builder: () => AudioPlayerHandler(),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.kurokatana94.swarmfm.channel.audio',
       androidNotificationChannelName: 'Swarm FM',
-      androidNotificationIcon: "assets/images/swarm-fm-icon",
+      androidNotificationIcon: "drawable/swarm_fm_icon",
       androidShowNotificationBadge: true,
       androidNotificationOngoing: true,
       androidNotificationClickStartsActivity: true,
     ),
   );
+  print('AudioHandler init done: $_audioHandler');
   runApp(MyApp(isFirstLaunch: isFirstLaunch,));
 }
 
@@ -48,6 +55,7 @@ class MyApp extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
+    print('MaterialApp (MyApp) init start');
     return MaterialApp(
       title: 'Swarm FM Player',
       theme: ThemeData(fontFamily: 'First Coffee'),
@@ -69,7 +77,6 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   static final _item = MediaItem(
     id: getStreamUrl(),
     title: "Swarm FM",
-    artUri: Uri.parse('asset:///assets/images/swarm-fm-icon.png'),
   );
 
   final _player = AudioPlayer();
@@ -141,6 +148,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   }
 
   PlaybackState _transformEvent(PlaybackEvent event) {
+    print('PlayBackState init start');
     return PlaybackState(
       controls: [
         MediaControl.rewind,
@@ -251,16 +259,17 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
             Text('― Themes ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
 
             // Theme selection options ------------------------------------------------
-            // TODO Fix switch visual behaviour
             // Neuro Theme
             ListTile(
-              leading: Switch(
-                value: isNeuroTheme,
-                inactiveThumbColor: activeTheme['settings_text'],
-                activeThumbColor: activeTheme['settings_bg'],
-                activeTrackColor: activeTheme['settings_text'],
-                inactiveTrackColor: activeTheme['settings_bg'],
-                onChanged: (isNeuroTheme) {}
+              leading: IgnorePointer(
+                child: Switch(
+                  value: isNeuroTheme,
+                  inactiveThumbColor: activeTheme['settings_text'],
+                  activeThumbColor: activeTheme['settings_bg'],
+                  activeTrackColor: activeTheme['settings_text'],
+                  inactiveTrackColor: activeTheme['settings_bg'],
+                  onChanged: (isNeuroTheme) {}
+                ),
               ),
               title: Text('Neuro', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
               onTap: () {
@@ -277,13 +286,15 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
 
             // Evil Theme
             ListTile(
-              leading: Switch(
-                value: isEvilTheme,
-                inactiveThumbColor: activeTheme['settings_text'],
-                activeThumbColor: activeTheme['settings_bg'],
-                activeTrackColor: activeTheme['settings_text'],
-                inactiveTrackColor: activeTheme['settings_bg'],
-                onChanged: (isEvilTheme) {}
+              leading: IgnorePointer(
+                child: Switch(
+                  value: isEvilTheme,
+                  inactiveThumbColor: activeTheme['settings_text'],
+                  activeThumbColor: activeTheme['settings_bg'],
+                  activeTrackColor: activeTheme['settings_text'],
+                  inactiveTrackColor: activeTheme['settings_bg'],
+                  onChanged: (isEvilTheme) {}
+                ),
               ),
               title: Text('Evil', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
               onTap: () {
@@ -300,13 +311,15 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
 
             // Vedal Theme
             ListTile(
-              leading: Switch(
-                value: isVedalTheme,
-                inactiveThumbColor: activeTheme['settings_text'],
-                activeThumbColor: activeTheme['settings_bg'],
-                activeTrackColor: activeTheme['settings_text'],
-                inactiveTrackColor: activeTheme['settings_bg'],
-                onChanged: (isVedalTheme) {}
+              leading: IgnorePointer(
+                child: Switch(
+                  value: isVedalTheme,
+                  inactiveThumbColor: activeTheme['settings_text'],
+                  activeThumbColor: activeTheme['settings_bg'],
+                  activeTrackColor: activeTheme['settings_text'],
+                  inactiveTrackColor: activeTheme['settings_bg'],
+                  onChanged: (isVedalTheme) {}
+                ),
               ),
               title: Text('Vedal', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
               onTap: () {
@@ -337,7 +350,6 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
       
       backgroundColor: activeTheme['main_bg'],
 
-      // TODO NURU/ENURU for loading icon
       
       body: Stack(
         children: [
