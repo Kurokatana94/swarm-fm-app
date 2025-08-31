@@ -9,6 +9,8 @@ import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:swarm_fm_app/packages/animations.dart';
 import 'package:swarm_fm_app/packages/popup.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:lock_orientation_screen/lock_orientation_screen.dart';
+import 'dart:io' show Platform;
 
 Map activeTheme = themes['neuro'];
 
@@ -18,6 +20,7 @@ bool isVedalTheme = false;
 
 late AudioHandler _audioHandler;
 
+// Main process init------------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -45,22 +48,24 @@ Future<void> main() async {
       androidNotificationClickStartsActivity: true,
     ),
   );
-  print('AudioHandler init done: $_audioHandler');
+
   runApp(MyApp(isFirstLaunch: isFirstLaunch,));
 }
 
+// App init ------------------------------------------------
 class MyApp extends StatelessWidget {
   final bool isFirstLaunch;
   const MyApp({super.key, required this.isFirstLaunch});
   
   @override
   Widget build(BuildContext context) {
-    print('MaterialApp (MyApp) init start');
-    return MaterialApp(
-      title: 'Swarm FM Player',
-      theme: ThemeData(fontFamily: 'First Coffee'),
-      debugShowCheckedModeBanner: false,
-      home: SwarmFMPlayerPage(isFirstLaunch: isFirstLaunch,),
+    return LockOrientation( 
+      child: MaterialApp(
+        title: 'Swarm FM Player',
+        theme: ThemeData(fontFamily: 'First Coffee'),
+        debugShowCheckedModeBanner: false,
+        home: SwarmFMPlayerPage(isFirstLaunch: isFirstLaunch,),
+      )
     );
   }
 }
@@ -72,7 +77,7 @@ class MediaState {
   MediaState(this.mediaItem, this.position);
 }
 
-/// An [AudioHandler] for playing a single item.
+/// An [AudioHandler] for playing a single item (live stream). ------------------------------------------------
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   static final _item = MediaItem(
     id: getStreamUrl(),
@@ -82,17 +87,16 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   final _player = AudioPlayer();
 
   AudioPlayerHandler() {
-    // Broadcast player state to AudioService
+    // Broadcast player state to AudioService (updates notification state)------------------------------------------------
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    // Broadcast current media item (needed for notification)
+    // Broadcast current media item (needed for notification) ------------------------------------------------
     mediaItem.add(_item);
 
-    // Load the audio source
+    // Load the audio source ------------------------------------------------
     _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
 
-        // Listen for idle/failure states and auto-restart
-    
+    // Keeps the player screen on ------------------------------------------------
     _player.playingStream.listen((isPlaying) {
       if (isPlaying) {
         WakelockPlus.enable();
@@ -100,7 +104,8 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
         WakelockPlus.disable();
       }
     });
-
+    
+    // Listen for idle/failure states and auto-restart ------------------------------------------------
     _player.playerStateStream.listen((playerState) async {
       if (playerState.processingState == ProcessingState.completed) {
         await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
@@ -108,6 +113,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
       }
     });
 
+    // Listen for errors and auto-restart ------------------------------------------------
     _player.playbackEventStream.listen((_) {},
       onError: (Object e, StackTrace stack) async {
         print('Playback error: $e');
@@ -124,8 +130,12 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     );
   }
 
+  // Controls ------------------------------------------------
   @override
-  Future<void> play() async => await _player.play();
+  Future<void> play() async {
+    await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+    await _player.play();
+  }
 
   @override
   Future<void> pause() async {
@@ -147,21 +157,13 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     return super.onTaskRemoved();
   }
 
+  // Notification handler (lockscreen and notification bar player controller) ------------------------------------------------
   PlaybackState _transformEvent(PlaybackEvent event) {
-    print('PlayBackState init start');
     return PlaybackState(
       controls: [
-        MediaControl.rewind,
         if (_player.playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
-        MediaControl.fastForward,
       ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-      },
-      androidCompactActionIndices: const [0, 1, 3],
+      androidCompactActionIndices: const [0],
       processingState: const {
         ProcessingState.idle: AudioProcessingState.idle,
         ProcessingState.loading: AudioProcessingState.loading,
@@ -191,7 +193,7 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
   void initState() {
   super.initState();
 
-    if (widget.isFirstLaunch) {
+    if (Platform.isAndroid && widget.isFirstLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showBatterySettingsPopup(context);
       });
@@ -341,7 +343,7 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
               leading: Icon(Icons.info),
               title: Text('Credits', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
               onTap: () {
-                // Leads to credits page
+                // TODO: Leads to credits page 
               },
             ),
           ],
@@ -349,200 +351,225 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
       ),
       
       backgroundColor: activeTheme['main_bg'],
-
       
-      body: Stack(
-        children: [
-
-          // Rotating cog animations ------------------------------------------------
-          // Cog 1
-          Positioned(
-            left: 310,
-            top: -90,
-            child: StreamBuilder<PlaybackState>(
-              stream: _audioHandler.playbackState,
-              builder: (context, snapshot) {
-                final playerState = snapshot.data;
-                final playing = playerState?.playing ?? false;
-
-                return RotatingCog(
-                  isSpinning: playing, // starts/stops with the music
-                  clockwise: true,
-                  icon: SvgPicture.asset(
-                    'assets/images/icons/neuro-cog.svg',
-                    colorFilter: ColorFilter.mode(
-                      activeTheme['animated_icons'],
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  size: 200,
-                  duration: 6,
-                );
-              },
-            ),
-          ),
-
-          // Cog 2
-          Positioned(
-            left: 221,
-            top: -31,
-            child: StreamBuilder<PlaybackState>(
-              stream: _audioHandler.playbackState,
-              builder: (context, snapshot) {
-                final playbackState = snapshot.data;
-                final playing = playbackState?.playing ?? false;
-
-                return RotatingCog(
-                  isSpinning: playing, // starts/stops with the music
-                  clockwise: false,
-                  icon: SvgPicture.asset(
-                    'assets/images/icons/neuro-cog.svg',
-                    colorFilter: ColorFilter.mode(
-                      activeTheme['animated_icons'],
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  size: 200,
-                  duration: 6,
-                );
-              },
-            ),
-          ),
-
-          // Cog 3
-          Positioned(
-            left: 115,
-            top: -50,
-            child: StreamBuilder<PlaybackState>(
-              stream: _audioHandler.playbackState,
-              builder: (context, snapshot) {
-                final playerState = snapshot.data;
-                final playing = playerState?.playing ?? false;
-
-                return RotatingCog(
-                  isSpinning: playing, // starts/stops with the music
-                  clockwise: true,
-                  icon: SvgPicture.asset(
-                    'assets/images/icons/neuro-cog.svg',
-                    colorFilter: ColorFilter.mode(
-                      activeTheme['animated_icons'],
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  size: 200,
-                  duration: 6,
-                );
-              },
-            ),
-          ),
+      body: LayoutBuilder( 
+        builder: (BuildContext context, BoxConstraints constraints) {
           
-          // Cog 4
-          Positioned(
-            left: -140,
-            top: 570,
-            child: StreamBuilder<PlaybackState>(
-              stream: _audioHandler.playbackState,
-              builder: (context, snapshot) {
-                final playerState = snapshot.data;
-                final playing = playerState?.playing ?? false;
+          final double screenWidth = constraints.maxWidth;
+          final double screenHeight = constraints.maxHeight;
+          print('Screen Height: $screenHeight - Screen Width: $screenWidth');
+          return Stack ( 
+            children: [ 
+              Positioned(
+                left: 0,
+                top: 0,
+                width: screenWidth,
+                height: screenHeight,
+                child: Stack(
+                  children: [
+                    // Rotating cog animations ------------------------------------------------
+                    // Cog 1
+                    Positioned(
+                      left: screenWidth -101,
+                      top: -90,
+                      child: StreamBuilder<PlaybackState>(
+                        stream: _audioHandler.playbackState,
+                        builder: (context, snapshot) {
+                          final playerState = snapshot.data;
+                          final playing = playerState?.playing ?? false;
 
-                return RotatingCog(
-                  isSpinning: playing, // starts/stops with the music
-                  icon: SvgPicture.asset(
-                    'assets/images/icons/neuro-cog.svg',
-                    colorFilter: ColorFilter.mode(
-                      activeTheme['animated_icons'],
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  size: 400,
-                  duration: 15, // slower rotation
-                );
-              },
-            ),
-          ),
-          
-          // Cog 5
-          Positioned(
-            left: 40,
-            top: 700,
-            child: StreamBuilder<PlaybackState>(
-              stream: _audioHandler.playbackState,
-              builder: (context, snapshot) {
-                final playerState = snapshot.data;
-                final playing = playerState?.playing ?? false;
-
-                return RotatingCog(
-                  isSpinning: playing, // starts/stops with the music
-                  clockwise: false,
-                  icon: SvgPicture.asset(
-                    'assets/images/icons/neuro-cog.svg',
-                    colorFilter: ColorFilter.mode(
-                      activeTheme['animated_icons'],
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  size: 400,
-                  duration: 15, // slower rotation
-                );
-              },
-            ),
-          ),
-          
-          // Main player controls ------------------------------------------------
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[               
-                Image.asset(activeTheme['logo']),
-
-                StreamBuilder<PlaybackState>(
-                  stream: _audioHandler.playbackState,
-                  builder: (context, snapshot) {
-                    final playerState = snapshot.data;
-                    final processingState = playerState?.processingState;
-                    final playing = playerState?.playing;
-
-                    if (processingState == AudioProcessingState.loading ||
-                        processingState == AudioProcessingState.buffering) {
-                      return CircularProgressIndicator(
-                        color: activeTheme['player_controls'],
-                      );
-                    } else if (playing != true) {
-                      return IconButton(
-                        icon: const Icon(Icons.play_arrow),
-                        iconSize: 64.0,
-                        color: activeTheme['player_controls'],
-                        onPressed: () async {
-                          await _audioHandler.play();
+                          return RotatingCog(
+                            isSpinning: playing, // starts/stops with the music
+                            clockwise: true,
+                            icon: SvgPicture.asset(
+                              'assets/images/icons/neuro-cog.svg',
+                              colorFilter: ColorFilter.mode(
+                                activeTheme['animated_icons'],
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            size: 200,
+                            duration: 6,
+                          );
                         },
-                      );
-                    } else if (processingState == AudioProcessingState.ready && playing == true) {
-                      return IconButton(
-                        icon: const Icon(Icons.pause),
-                        iconSize: 64.0,
-                        color: activeTheme['player_controls'],
-                        onPressed: () async{
-                          await _audioHandler.pause();
+                      ),
+                    ),
+
+                    // Cog 2
+                    Positioned(
+                      left: screenWidth - 190,
+                      top: -31,
+                      child: StreamBuilder<PlaybackState>(
+                        stream: _audioHandler.playbackState,
+                        builder: (context, snapshot) {
+                          final playbackState = snapshot.data;
+                          final playing = playbackState?.playing ?? false;
+
+                          return RotatingCog(
+                            isSpinning: playing, // starts/stops with the music
+                            clockwise: false,
+                            icon: SvgPicture.asset(
+                              'assets/images/icons/neuro-cog.svg',
+                              colorFilter: ColorFilter.mode(
+                                activeTheme['animated_icons'],
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            size: 200,
+                            duration: 6,
+                          );
                         },
-                      );
-                    } else {
-                      try {
-                          _audioHandler.stop(); // stop current playback
-                          _audioHandler.play();
-                        } catch (e) {
-                          print('Failed to restart stream: $e');
-                        }
-                      }
-                      return CircularProgressIndicator(
-                        color: activeTheme['player_controls'],
-                      );
-                  },
+                      ),
+                    ),
+
+                    // Cog 3
+                    Positioned(
+                      left: screenWidth - 296,
+                      top: -50,
+                      child: StreamBuilder<PlaybackState>(
+                        stream: _audioHandler.playbackState,
+                        builder: (context, snapshot) {
+                          final playerState = snapshot.data;
+                          final playing = playerState?.playing ?? false;
+
+                          return RotatingCog(
+                            isSpinning: playing, // starts/stops with the music
+                            clockwise: true,
+                            icon: SvgPicture.asset(
+                              'assets/images/icons/neuro-cog.svg',
+                              colorFilter: ColorFilter.mode(
+                                activeTheme['animated_icons'],
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            size: 200,
+                            duration: 6,
+                          );
+                        },
+                      ),
+                    ),
+                  ]
+                )
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                width: screenWidth,
+                height: screenHeight,
+                child: Stack(
+                  children: [
+                    // Cog 4
+                    Positioned(
+                      left: - 142,
+                      top: screenHeight - 284,
+                      child: StreamBuilder<PlaybackState>(
+                        stream: _audioHandler.playbackState,
+                        builder: (context, snapshot) {
+                          final playerState = snapshot.data;
+                          final playing = playerState?.playing ?? false;
+
+                          return RotatingCog(
+                            isSpinning: playing, // starts/stops with the music
+                            icon: SvgPicture.asset(
+                              'assets/images/icons/neuro-cog.svg',
+                              colorFilter: ColorFilter.mode(
+                                activeTheme['animated_icons'],
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            size: 400,
+                            duration: 15, // slower rotation
+                          );
+                        },
+                      ),
+                    ),
+                    
+                    // Cog 5
+                    Positioned(
+                      left: 38,
+                      top: screenHeight - 162,
+                      child: StreamBuilder<PlaybackState>(
+                        stream: _audioHandler.playbackState,
+                        builder: (context, snapshot) {
+                          final playerState = snapshot.data;
+                          final playing = playerState?.playing ?? false;
+
+                          return RotatingCog(
+                            isSpinning: playing, // starts/stops with the music
+                            clockwise: false,
+                            icon: SvgPicture.asset(
+                              'assets/images/icons/neuro-cog.svg',
+                              colorFilter: ColorFilter.mode(
+                                activeTheme['animated_icons'],
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            size: 400,
+                            duration: 15, // slower rotation
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                )
+              ),
+              
+              // Main player controls ------------------------------------------------
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[               
+                    Image.asset(activeTheme['logo']),
+
+                    StreamBuilder<PlaybackState>(
+                      stream: _audioHandler.playbackState,
+                      builder: (context, snapshot) {
+                        final playerState = snapshot.data;
+                        final processingState = playerState?.processingState;
+                        final playing = playerState?.playing;
+
+                        if (processingState == AudioProcessingState.loading ||
+                            processingState == AudioProcessingState.buffering) {
+                          return CircularProgressIndicator(
+                            color: activeTheme['player_controls'],
+                          );
+                        } else if (playing != true) {
+                          return IconButton(
+                            icon: const Icon(Icons.play_arrow),
+                            iconSize: 64.0,
+                            color: activeTheme['player_controls'],
+                            onPressed: () async {
+                              await _audioHandler.play();
+                            },
+                          );
+                        } else if (processingState == AudioProcessingState.ready && playing == true) {
+                          return IconButton(
+                            icon: const Icon(Icons.pause),
+                            iconSize: 64.0,
+                            color: activeTheme['player_controls'],
+                            onPressed: () async{
+                              await _audioHandler.pause();
+                            },
+                          );
+                        } else {
+                          try {
+                              _audioHandler.stop(); // stop current playback
+                              _audioHandler.play();
+                            } catch (e) {
+                              print('Failed to restart stream: $e');
+                            }
+                          }
+                          return CircularProgressIndicator(
+                            color: activeTheme['player_controls'],
+                          );
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ]
+              ),
+            ]
+          );
+        }
       )
     );
   }
@@ -582,19 +609,19 @@ List<Text> outlineFormatter(String text, int outlineWidth, Color outlineColor, C
   return outlines;
 }
 
-// Function to change the active theme
+// Function to change the active theme ------------------------------------------------
 void changeTheme(String themeName) {
   if (themes.containsKey(themeName)) {
     activeTheme = themes[themeName];
   }
 }
 
-// It simply returns the active stream url, but in future might change depending on how the system evolves
+// It simply returns the active stream url, but in future might change depending on how the system evolves ------------------------------------------------
 String getStreamUrl() {
   return 'https://customer-x1r232qaorg7edh8.cloudflarestream.com/3a05b1a1049e0f24ef1cd7b51733ff09/manifest/video.m3u8';
 }
 
-// Themes saving
+// Themes saving ------------------------------------------------
 Future<void> saveThemeState(String themeName, bool isNeuro, bool isEvil, bool isVedal) async {
   final prefs = await SharedPreferences.getInstance();
 
@@ -604,7 +631,7 @@ Future<void> saveThemeState(String themeName, bool isNeuro, bool isEvil, bool is
   await prefs.setBool('isVedalTheme', isVedal);
 }
 
-// Theme loading
+// Theme loading ------------------------------------------------
 Future<void> loadThemeState() async {
   final prefs = await SharedPreferences.getInstance();
 

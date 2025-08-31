@@ -46,6 +46,16 @@ linked_*.ds
 unlinked.ds
 unlinked_spec.ds
 
+# IDE/tooling files
+.idea/
+.DS_Store
+.vscode/
+\*.iml
+
+# Build artifacts
+.dart_tool/
+build/
+
 # Android related
 **/android/**/gradle-wrapper.jar
 .gradle/
