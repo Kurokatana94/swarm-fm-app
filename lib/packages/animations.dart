@@ -13,8 +13,7 @@ class RotatingCog extends StatefulWidget {
   _RotatingCogState createState() => _RotatingCogState();
 }
 
-class _RotatingCogState extends State<RotatingCog>
-    with SingleTickerProviderStateMixin {
+class _RotatingCogState extends State<RotatingCog> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _rotation;
 

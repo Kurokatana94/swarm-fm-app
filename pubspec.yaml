@@ -47,6 +47,8 @@ dependencies:
   app_settings: ^6.1.1
   permission_handler: ^12.0.1
   lock_orientation_screen: ^0.0.4
+  linkfy_text: ^1.1.6
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -84,6 +86,12 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/images/icons/neuro-cog.svg
+    - assets/images/icons/youtube-svgrepo-com.svg
+    - assets/images/icons/github-svgrepo-com.svg
+    - assets/images/icons/twitch-tile.svg
+    - assets/images/icons/X_logo_2023_original.svg
+    - assets/images/icons/swarm-fm-icon.svg
+    - assets/images/icons/vedal.svg
     - assets/images/evil-logo.png
     - assets/images/neuro-logo.png
     - assets/images/vedal-logo.png

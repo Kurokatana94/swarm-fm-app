@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:swarm_fm_app/packages/animations.dart';
 import 'package:swarm_fm_app/packages/popup.dart';
+import 'package:swarm_fm_app/packages/credits.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:lock_orientation_screen/lock_orientation_screen.dart';
 import 'dart:io' show Platform;
@@ -267,7 +268,7 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
 
                 Text('― Themes ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
 
-                // Theme selection options ------------------------------------------------
+                // Theme selection options ------------------------------------------------ 
                 // Neuro Theme
                 ListTile(
                   leading: IgnorePointer(
@@ -347,10 +348,10 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
 
                 // Credits page ------------------------------------------------
                 ListTile(
-                  leading: Icon(Icons.info),
+                  leading: Icon(Icons.info, color: activeTheme['settings_text'],),
                   title: Text('Credits', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
                   onTap: () {
-                    // TODO: Leads to credits page 
+                    Navigator.push(context, MaterialPageRoute<void>(builder: (context) => Credits(theme: activeTheme)));
                   },
                 ),
               ],
