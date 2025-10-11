@@ -626,7 +626,7 @@ void changeTheme(String themeName) {
 
 // It simply returns the active stream url, but in future might change depending on how the system evolves ------------------------------------------------
 String getStreamUrl() {
-  return 'https://customer-x1r232qaorg7edh8.cloudflarestream.com/3a05b1a1049e0f24ef1cd7b51733ff09/manifest/video.m3u8';
+  return 'https://stream.sw.arm.fm/new/hls_audio.m3u8';
 }
 
 // Themes saving ------------------------------------------------
