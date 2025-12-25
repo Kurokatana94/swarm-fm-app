@@ -3,8 +3,8 @@ import 'package:flutter_svg/svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class Credits extends StatelessWidget {
-  Map theme;
-  Credits({super.key, required this.theme});
+  final Map theme;
+  const Credits({super.key, required this.theme});
 
   @override
   Widget build(BuildContext context) {
