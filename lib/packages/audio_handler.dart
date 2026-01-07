@@ -5,8 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// An [AudioHandler] for playing a single item (live stream). ------------------------------------------------
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
-  // MODIFIED: Changed from 'static final _item' to a dynamic getter
-  // static final _item = MediaItem(id: getStreamUrl(), title: "Swarm FM");
+
   MediaItem get _item => MediaItem(
     id: getStreamUrl(),
     title: "Swarm FM",
@@ -17,12 +16,11 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   AudioPlayerHandler() {
     // Broadcast player state to AudioService (updates notification state)------------------------------------------------
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
-
+  
     // Broadcast current media item (needed for notification) ------------------------------------------------
     mediaItem.add(_item);
 
-    // MODIFIED: Removed the static setAudioSource from constructor to allow fresh URL on play
-    // _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+    if (activeAudioService == "HLS") _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
 
     // Keeps the player screen on ------------------------------------------------
     _player.playingStream.listen((isPlaying) {
@@ -36,8 +34,13 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     // Listen for idle/failure states and auto-restart ------------------------------------------------
     _player.playerStateStream.listen((playerState) async {
       if (playerState.processingState == ProcessingState.completed) {
-        // MODIFIED: Triggers the play() method which now handles the next random URL
-        // await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+        if (activeAudioService == "HLS") {
+          await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+          await _player.play();
+          
+          return;
+        }
+        
         await play();
       }
     });
@@ -48,9 +51,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
         print('Playback error: $e');
         while(!_player.playing){
           try {
-            // MODIFIED: Fetches the fresh randomized URL on retry
-            // await _player.setUrl(getStreamUrl(), preload: false);
-            await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
+            activeAudioService == "HLS" ? await _player.setUrl(getStreamUrl(), preload: false) : await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
             await _player.play();
           } catch (e) {
             await Future.delayed(const Duration(seconds: 1));
@@ -64,10 +65,12 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   // Controls ------------------------------------------------
   @override
   Future<void> play() async {
-    // MODIFIED: Every time play is called, it re-fetches the random URL from main.dart
-    // await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
-    mediaItem.add(_item);
-    await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
+    if (activeAudioService == "SHUFFLE") {
+      mediaItem.add(_item);
+      await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
+    } else {
+      await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+    }
     await _player.play();
   }
 

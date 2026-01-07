@@ -172,6 +172,46 @@ class _SwarmFMPlayerPageState extends State<SwarmFMPlayerPage> {
                   },
                 ),
 
+                Text('― Audio Service ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
+
+                ListTile(
+                  leading: IgnorePointer(
+                    child: Switch(
+                      value: activeAudioService == "HLS",
+                      inactiveThumbColor: activeTheme['settings_text'],
+                      activeThumbColor: activeTheme['settings_bg'],
+                      activeTrackColor: activeTheme['settings_text'],
+                      inactiveTrackColor: activeTheme['settings_bg'],
+                      onChanged: (_) {}
+                    ),
+                  ),
+                  title: Text('HLS', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
+                  onTap: () {
+                    setState(() {
+                      activeAudioService = "HLS";
+                    });
+                  },
+                ),
+
+                ListTile(
+                  leading: IgnorePointer(
+                    child: Switch(
+                      value: activeAudioService == "SHUFFLE",
+                      inactiveThumbColor: activeTheme['settings_text'],
+                      activeThumbColor: activeTheme['settings_bg'],
+                      activeTrackColor: activeTheme['settings_text'],
+                      inactiveTrackColor: activeTheme['settings_bg'],
+                      onChanged: (_) {}
+                    ),
+                  ),
+                  title: Text('Shuffle', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
+                  onTap: () {
+                    setState(() {
+                      activeAudioService = "SHUFFLE";
+                    });
+                  },
+                ),
+
                 Text('― Info ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
 
                 // Credits page ------------------------------------------------

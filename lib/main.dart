@@ -16,6 +16,11 @@ bool isNeuroTheme = true;
 bool isEvilTheme = false;
 bool isVedalTheme = false;
 
+String activeAudioService = "HLS";
+
+bool isHls = true;
+bool isShuffle = false;
+
 late AudioHandler audioHandler;
 
 // Main process init------------------------------------------------
@@ -118,7 +123,7 @@ void changeTheme(String themeName) {
 // It simply returns the active stream url, but in future might change depending on how the system evolves ------------------------------------------------
 String getStreamUrl() {
   final randomInt = Random().nextInt(1047) + 1;
-  return 'https://swarmfm.boopdev.com/assets/music/$randomInt.mp3';
+  return activeAudioService == "HLS" ? 'https://stream.sw.arm.fm/new/hls_audio.m3u8' : 'https://swarmfm.boopdev.com/assets/music/$randomInt.mp3';
 }
 
 // Themes saving ------------------------------------------------
