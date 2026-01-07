@@ -34,8 +34,8 @@ A mobile player app built with Flutter that allows users to listen the best FM o
 
 ## Latest Release:
 
-- [**Android**](https://github.com/Kurokatana94/swarm-fm-app/releases/download/v1.0.1/app-release.apk)
-- [**iOS**](https://github.com/Kurokatana94/swarm-fm-app/releases/download/v1.0.1/Payload.ipa) --> ⚠️ (on these platforms it could potentially not work. I have no way to test it not owning iOS devices, please report if issues arise)
+- [**Android**](https://github.com/Kurokatana94/swarm-fm-app/releases/download/v1.1.0/swarmfm-v1.1.0.apk)
+- [**iOS**](https://github.com/Kurokatana94/swarm-fm-app/releases/download/v1.1.0/swarmfm-v1.1.0.ipa) --> ⚠️ (on these platforms it could potentially not work. I have no way to test it not owning iOS devices, please report if issues arise)
 
 ### Thanks for Checking It Out!
 
