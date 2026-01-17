@@ -71,6 +71,9 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   Future<void> _initMetadata() async {
     // Show default info immediately
     mediaItem.add(_defaultItem);
+
+    // First fetch
+    await _refreshMetadata();
   }
 
   Future<void> _refreshMetadata() async {
