@@ -1,33 +1,39 @@
+import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:swarm_fm_app/main.dart';
+import 'package:swarm_fm_app/utils/general_utils.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:swarm_fm_app/packages/song_data_fetcher.dart';
 
 /// An [AudioHandler] for playing a single item (live stream). ------------------------------------------------
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
-  MediaItem get _item => MediaItem(
+  final _player = AudioPlayer();
+  Timer? _metadataTimer;
+
+  MediaItem get _defaultItem => MediaItem(
     id: getStreamUrl(),
     title: "Swarm FM",
+    artist: "",   
   );
-  
-  final _player = AudioPlayer();
 
   AudioPlayerHandler() {
+    _initMetadata();
+
     // Broadcast player state to AudioService (updates notification state)------------------------------------------------
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
-  
-    // Broadcast current media item (needed for notification) ------------------------------------------------
-    mediaItem.add(_item);
 
-    if (activeAudioService == "HLS") _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+    if (activeAudioService == "HLS") _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
 
     // Keeps the player screen on ------------------------------------------------
     _player.playingStream.listen((isPlaying) {
       if (isPlaying) {
         WakelockPlus.enable();
+        _metadataTimer = Timer.periodic(Duration(seconds: 20), (_) async => await _refreshMetadata());
       } else {
         WakelockPlus.disable();
+        _metadataTimer?.cancel();
       }
     });
     
@@ -35,7 +41,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     _player.playerStateStream.listen((playerState) async {
       if (playerState.processingState == ProcessingState.completed) {
         if (activeAudioService == "HLS") {
-          await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+          await _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
           await _player.play();
           
           return;
@@ -62,14 +68,35 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     );
   }
 
+  Future<void> _initMetadata() async {
+    // Show default info immediately
+    mediaItem.add(_defaultItem);
+  }
+
+  Future<void> _refreshMetadata() async {
+    try {
+      SongData songData = await fetchSongData();
+
+      final newItem = MediaItem(
+        id: getStreamUrl(),
+        title: songData.title,
+        artist: "${songData.artist} ft. ${songData.singers.join(', ').toTitleCase}",
+      );
+
+      mediaItem.add(newItem);
+    } catch (e) {
+      print('Failed to fetch song data: $e');
+    }
+  }
+
   // Controls ------------------------------------------------
   @override
   Future<void> play() async {
     if (activeAudioService == "SHUFFLE") {
-      mediaItem.add(_item);
+      mediaItem.add(_defaultItem);
       await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
     } else {
-      await _player.setAudioSource(AudioSource.uri(Uri.parse(_item.id)));
+      await _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
     }
     await _player.play();
   }
@@ -84,6 +111,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> stop() async {
+    _metadataTimer?.cancel();
     await _player.stop();
     return super.stop();
   }
