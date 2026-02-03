@@ -49,6 +49,12 @@ dependencies:
   lock_orientation_screen: ^0.0.4
   linkfy_text: ^1.1.6
   url_launcher: ^6.3.2
+  uuid: ^4.5.1
+  flutter_secure_storage: ^9.2.2
+  web_socket_client: ^0.2.1
+  flutter_riverpod: ^2.4.0
+  dio: ^5.3.0
+  get_it: ^7.6.0
 
 dev_dependencies:
   flutter_test:
@@ -95,6 +101,10 @@ flutter:
     - assets/images/evil-logo.png
     - assets/images/neuro-logo.png
     - assets/images/vedal-logo.png
+    - assets/images/icons/chat-icon.svg
+    - assets/images/icons/chat-icon-bg.svg
+    - assets/images/gear-rack-chat.svg
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

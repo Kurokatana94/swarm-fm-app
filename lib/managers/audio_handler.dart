@@ -4,7 +4,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:swarm_fm_app/main.dart';
 import 'package:swarm_fm_app/utils/general_utils.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:swarm_fm_app/packages/song_data_fetcher.dart';
+import 'package:swarm_fm_app/managers/song_data_fetcher.dart';
 
 /// An [AudioHandler] for playing a single item (live stream). ------------------------------------------------
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {

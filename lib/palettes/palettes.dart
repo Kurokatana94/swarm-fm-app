@@ -30,4 +30,4 @@ const vedalLightGreen = Color(0xFF97CF91);
 const vedalGreen = Color(0xFF027451);
 const vedalDarkGreen = Color(0xFF013D2B);
 const vedalPurple = Color(0xFF867DC5);
-const vedalDarkPurple = Color(0xFF452E95);
+const vedalDarkPurple = Color(0xFF5845a0);

@@ -2,12 +2,16 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:swarm_fm_app/packages/audio_handler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:swarm_fm_app/managers/audio_handler.dart';
 import 'package:swarm_fm_app/packages/main_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:lock_orientation_screen/lock_orientation_screen.dart';
+import 'package:swarm_fm_app/packages/services/fpwebsockets.dart';
+import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -21,6 +25,7 @@ bool isHls = true;
 bool isShuffle = false;
 
 late AudioHandler audioHandler;
+late FPWebsockets fpWebsockets;
 
 // Main process init------------------------------------------------
 Future<void> main() async {
@@ -37,6 +42,11 @@ Future<void> main() async {
       androidNotificationClickStartsActivity: true,
     ),
   );
+
+  // Initialize WebSocket
+  final packageInfo = await PackageInfo.fromPlatform();
+  final userAgent = 'SwarmFMApp/${packageInfo.version} (${packageInfo.buildNumber})';
+  fpWebsockets = FPWebsockets(userAgent: userAgent);
 
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
@@ -60,13 +70,15 @@ class MyApp extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
-    return LockOrientation( 
-      child: MaterialApp(
-        title: 'Swarm FM Player',
-        theme: ThemeData(fontFamily: 'First Coffee'),
-        debugShowCheckedModeBanner: false,
-        home: SwarmFMPlayerPage(isFirstLaunch: isFirstLaunch,),
-      )
+    return ProviderScope(
+      child: LockOrientation( 
+        child: MaterialApp(
+          title: 'Swarm FM Player',
+          theme: ThemeData(fontFamily: 'First Coffee'),
+          debugShowCheckedModeBanner: false,
+          home: SwarmFMPlayerPage(isFirstLaunch: isFirstLaunch,),
+        )
+      ),
     );
   }
 }

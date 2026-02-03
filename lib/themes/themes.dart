@@ -20,6 +20,8 @@ Map themes = {
     'title_fill': pinkBeije,
     'control_icons': darkPurple,
     'player_controls': darkPurple,
+    'chat_icon_bg': darkPurple,
+    'chat_icon_fg': lightBeige,
   },
   'evil': {
     'name': 'Evil',
@@ -40,6 +42,8 @@ Map themes = {
     'title_fill': evilDarkPink,
     'control_icons': evilDarkPink,
     'player_controls': evilBlack,
+    'chat_icon_bg': evilSoftPink,
+    'chat_icon_fg': evilBlack,
   },
   'vedal': {
     'name': 'Vedal',
@@ -60,5 +64,7 @@ Map themes = {
     'title_fill': vedalLightGreen,
     'control_icons': vedalDarkPurple,
     'player_controls': vedalDarkGreen,
+    'chat_icon_bg': vedalDarkPurple,
+    'chat_icon_fg': vedalPurple,
   },
 };
