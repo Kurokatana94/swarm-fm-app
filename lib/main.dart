@@ -11,7 +11,6 @@ import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:lock_orientation_screen/lock_orientation_screen.dart';
 import 'package:swarm_fm_app/packages/services/fpwebsockets.dart';
-import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -23,6 +22,8 @@ String activeAudioService = "HLS";
 
 bool isHls = true;
 bool isShuffle = false;
+
+bool isChatEnabled = true;
 
 late AudioHandler audioHandler;
 late FPWebsockets fpWebsockets;
@@ -54,8 +55,9 @@ Future<void> main() async {
   if (status.isDenied) {
     await Permission.notification.request();
   }
-
-  await loadThemeState();
+  
+  // Load saved preferences
+  await _loadPrefsStates();
   
   SharedPreferences prefs = await SharedPreferences.getInstance();
   bool? isFirstLaunch = prefs.getBool('isFirstLaunch') ?? true;
@@ -158,4 +160,36 @@ Future<void> loadThemeState() async {
   isVedalTheme = prefs.getBool('isVedalTheme') ?? false;
 
   activeTheme = themes[themeName];
+}
+
+Future<void> saveAudioServiceState(String audioService) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setString('activeAudioService', audioService);
+}
+
+Future<void> loadAudioServiceState() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  activeAudioService = prefs.getString('activeAudioService') ?? 'HLS';
+
+  isHls = activeAudioService == "HLS";
+}
+
+Future<void> saveChatState(bool isChatEnabled) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setBool('isChatEnabled', isChatEnabled);
+}
+
+Future<void> loadChatState() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  isChatEnabled = prefs.getBool('isChatEnabled') ?? true;
+}
+
+Future<void> _loadPrefsStates() async {
+  await loadThemeState();
+  await loadAudioServiceState();
+  await loadChatState();
 }

@@ -163,7 +163,7 @@ class ChatMessageView extends ConsumerWidget {
           ),
           TextSpan(
             style: message.isStruckThrough
-                ? const TextStyle(decoration: TextDecoration.lineThrough)
+                ? const TextStyle(decoration: TextDecoration.lineThrough, fontWeight: FontWeight.bold,)
                 : null,
             children: spans,
           ),
@@ -195,6 +195,7 @@ class ChatMessageView extends ConsumerWidget {
               decoration: message.isStruckThrough
                   ? TextDecoration.lineThrough
                   : null,
+              fontWeight: FontWeight.bold,
               color: textColor,
             ),
           ),

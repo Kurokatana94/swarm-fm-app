@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class TwitchLoginPopup extends StatefulWidget {
   const TwitchLoginPopup({super.key});
@@ -11,75 +12,50 @@ class TwitchLoginPopup extends StatefulWidget {
 
 class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
   final ChatManager _chatManager = ChatManager();
-  final WebViewCookieManager _cookieManager = WebViewCookieManager();
-  late final WebViewController _controller;
-  bool _isLoading = true;
-  String? _sessionId;
+  InAppWebViewController? _webViewController;
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeWebView();
-  }
-
-  Future<void> _initializeWebView() async {
-    _sessionId = _chatManager.generateSessionId();
-
-    await _cookieManager.setCookie(
-      WebViewCookie(
-        name: 'swarm_fm_player_session',
-        value: _sessionId!,
-        domain: 'player.sw.arm.fm',
-        path: '/',
-      ),
-    );
-
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (_) {
-            if (mounted) {
-              setState(() => _isLoading = true);
-            }
-          },
-          onPageFinished: (url) async {
-            if (mounted) {
-              setState(() => _isLoading = false);
-            }
-
-            if (url.startsWith('https://player.sw.arm.fm/')) {
-              // NOTE: webview_flutter doesn't expose cookie reads reliably.
-              // For now, we store the session we set before OAuth.
-              // If this doesn't authenticate correctly, we can switch
-              // to flutter_inappwebview for direct cookie access.
-              if (_sessionId != null) {
-                await _chatManager.saveSession(_sessionId!);
-              }
-              if (mounted) {
-                Navigator.of(context).pop(true);
-              }
-            }
-          },
-        ),
-      )
-      ..loadRequest(
-        Uri.parse(
-          'https://id.twitch.tv/oauth2/authorize?'
-          'client_id=ijg6o5dv2nq9j6g4tcm6mx3p25twbz&'
-          'redirect_uri=https://player.sw.arm.fm/twitch_auth&'
-          'response_type=code&'
-          'scope=',
-        ),
+  Future<void> _handleDone() async {
+    try {
+      final cookieManager = CookieManager.instance();
+      final cookies = await cookieManager.getCookies(
+        url: WebUri('https://player.sw.arm.fm'),
       );
+
+      final sessionCookie = cookies.firstWhere(
+        (cookie) => cookie.name == 'swarm_fm_player_session',
+        orElse: () => Cookie(name: ''),
+      );
+
+      if (sessionCookie.name.isNotEmpty) {
+        print('Session cookie found: ${sessionCookie.value}');
+        await _chatManager.saveSession(sessionCookie.value);
+        if (mounted) {
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No session found. Please try logging in first.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error getting cookie: $e');
+      if (mounted) {
+        Navigator.of(context).pop(false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width * .8,
-        maxHeight: MediaQuery.of(context).size.height * .6,
+        maxWidth: MediaQuery.of(context).size.width * 0.95,
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),
       child: Column(
         children: [
@@ -89,8 +65,15 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
               children: [
                 const Expanded(
                   child: Text(
-                    'Login with Twitch',
+                    'Swarm FM Player - Login',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _handleDone,
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
@@ -102,12 +85,25 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: Stack(
-              children: [
-                WebViewWidget(controller: _controller),
-                if (_isLoading)
-                  const Center(child: CircularProgressIndicator()),
-              ],
+            child: InAppWebView(
+              initialUrlRequest: URLRequest(
+                url: WebUri('https://player.sw.arm.fm/'),
+              ),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                domStorageEnabled: true,
+                thirdPartyCookiesEnabled: true,
+                userAgent: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+              ),
+              onWebViewCreated: (controller) {
+                _webViewController = controller;
+              },
+              onLoadStart: (controller, url) {
+                print('Loading: $url');
+              },
+              onLoadStop: (controller, url) {
+                print('Loaded: $url');
+              },
             ),
           ),
         ],

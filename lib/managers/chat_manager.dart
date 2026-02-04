@@ -8,6 +8,8 @@ class ChatManager {
 
   static const String _sessionStorageKey = 'swarm_chat_session';
   static const String _userIdStorageKey = 'swarm_chat_user_id';
+  static const String _usernameStorageKey = 'twitch_username';
+  static const String _accessTokenStorageKey = 'twitch_access_token';
   // static const String _chatServerUrl = 'wss://player.sw.arm.fm/chat';
   static const int _maxMessages = 100;
 
@@ -49,9 +51,31 @@ class ChatManager {
     return await _secureStorage.read(key: _userIdStorageKey);
   }
 
+  // Save Twitch username
+  Future<void> saveUsername(String username) async {
+    await _secureStorage.write(key: _usernameStorageKey, value: username);
+  }
+
+  // Fetch Twitch username
+  Future<String?> fetchUsername() async {
+    return await _secureStorage.read(key: _usernameStorageKey);
+  }
+
+  // Save Twitch access token
+  Future<void> saveAccessToken(String token) async {
+    await _secureStorage.write(key: _accessTokenStorageKey, value: token);
+  }
+
+  // Fetch Twitch access token
+  Future<String?> fetchAccessToken() async {
+    return await _secureStorage.read(key: _accessTokenStorageKey);
+  }
+
   Future<void> clearSession() async {
     await _secureStorage.delete(key: _sessionStorageKey);
     await _secureStorage.delete(key: _userIdStorageKey);
+    await _secureStorage.delete(key: _usernameStorageKey);
+    await _secureStorage.delete(key: _accessTokenStorageKey);
   }
 
   Future<bool> isLoggedIn() async {

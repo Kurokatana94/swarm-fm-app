@@ -9,9 +9,11 @@ import 'package:swarm_fm_app/packages/animations.dart';
 import 'package:swarm_fm_app/packages/credits.dart';
 import 'package:swarm_fm_app/packages/popup.dart';
 import 'package:swarm_fm_app/packages/chat_panel.dart';
-import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
+import 'package:swarm_fm_app/packages/providers/chat_providers.dart' as chat_providers;
 import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
-import 'package:swarm_fm_app/packages/services/fpwebsockets.dart';
+import 'package:swarm_fm_app/managers/chat_manager.dart';
+import 'package:swarm_fm_app/packages/twitch_login_popup.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends ConsumerStatefulWidget {
@@ -27,6 +29,8 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
 
   bool _isChatEnabled = true;
   bool _isChatOpen = false;
+  bool _isChatLoggedIn = false;
+  final ChatManager _chatManager = ChatManager();
   double _chatHeightFactor = 1 / 3;
   double _chatButtonDragAngle = 0;
   late AnimationController _chatAnimationController;
@@ -61,6 +65,10 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
       _initializeChat();
     });
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadChatLoginState();
+    });
+
     if (Platform.isAndroid && widget.isFirstLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showBatterySettingsPopup(context);
@@ -84,11 +92,182 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     }
   }
 
+  Future<void> _loadChatLoginState() async {
+    final loggedIn = await _chatManager.isLoggedIn();
+    if (mounted) {
+      setState(() {
+        _isChatLoggedIn = loggedIn;
+      });
+    }
+  }
+
+
+  Future<void> _handleChatLogin() async {
+    if (!mounted) return;
+
+    // Check for existing session cookie first
+    final cookieManager = CookieManager.instance();
+    try {
+      final cookies = await cookieManager.getCookies(
+        url: WebUri('https://player.sw.arm.fm'),
+      );
+
+      final sessionCookie = cookies.firstWhere(
+        (cookie) => cookie.name == 'swarm_fm_player_session',
+        orElse: () => Cookie(name: ''),
+      );
+
+      if (sessionCookie.name.isNotEmpty) {
+        print('Found existing session cookie, attempting login...');
+        await _loginWithSessionToken(sessionCookie.value);
+        return;
+      }
+    } catch (e) {
+      print('Error checking session cookie: $e');
+    }
+
+    // No existing session, show instructions then launch Twitch login popup
+    if (!mounted) return;
+    
+    final shouldProceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Twitch Login'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To enable chat, you need to log in with Twitch:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 16),
+            Text('1. Click the Twitch login button in the web player'),
+            SizedBox(height: 8),
+            Text('2. Complete the Twitch authentication'),
+            SizedBox(height: 8),
+            Text('3. Press "Done" button at the top when finished'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldProceed != true || !mounted) return;
+    
+    final result = await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const TwitchLoginPopup(),
+    );
+
+    // Handle the result from the popup
+    if (result == true) {
+      // Session was saved by the popup, now authenticate
+      final session = await _chatManager.fetchSession();
+      if (session != null && session.isNotEmpty) {
+        await _loginWithSessionToken(session);
+      }
+    } else if (result is String && result.isNotEmpty) {
+      // Got an auth code (if needed for future implementation)
+      print('Received auth code: $result');
+    }
+  }
+
+  Future<void> _loginWithSessionToken(String sessionToken) async {
+    print('=== MANUAL SESSION LOGIN ===');
+    print('Session token: $sessionToken');
+
+    try {
+      await _chatManager.saveSession(sessionToken);
+      final fpWebsockets = ref.read(fpWebsocketsProvider);
+
+      print('Calling authorize() with session: $sessionToken');
+      final username = await fpWebsockets.authorise(sessionToken).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('Authorization timed out after 10 seconds');
+          return '';
+        },
+      );
+      print('Authorize returned - Username: "$username"');
+
+      if (mounted) {
+        if (username.isNotEmpty) {
+          setState(() {
+            _isChatLoggedIn = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Logged in as $username'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login failed. Please try again.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error in _loginWithSessionToken: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Login error: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleChatLogout() async {
+    final cookieManager = CookieManager.instance();
+    await _chatManager.clearSession();
+    try {
+      await cookieManager.deleteAllCookies();
+    } catch (e) {
+      print('Error clearing cookies: $e');
+    }
+    if (mounted) {
+      setState(() {
+        _isChatLoggedIn = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _chatAnimationController.dispose();
     _chatButtonSpinController.dispose();
     super.dispose();
+  }
+
+  void _sendChatMessage(String message) {
+    if (_isChatLoggedIn) {
+      final fpWebsockets = ref.read(fpWebsocketsProvider);
+      fpWebsockets.sendChatMessage(message);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in to send messages'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _toggleChat() {
@@ -282,6 +461,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                   onTap: () {
                     setState(() {
                       activeAudioService = "HLS";
+                      saveAudioServiceState(activeAudioService);
                     });
                   },
                 ),
@@ -301,6 +481,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                   onTap: () {
                     setState(() {
                       activeAudioService = "SHUFFLE";
+                      saveAudioServiceState(activeAudioService);
                     });
                   },
                 ),
@@ -310,18 +491,29 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                 // Twitch Chat Options ------------------------------------------------
                 ListTile(
                   leading: Switch(
-                    value: _isChatEnabled,
+                    value: isChatEnabled,
                     inactiveThumbColor: activeTheme['settings_text'],
                     activeThumbColor: activeTheme['settings_bg'],
                     activeTrackColor: activeTheme['settings_text'],
                     inactiveTrackColor: activeTheme['settings_bg'],
                     onChanged: (_) {
                       setState(() {
-                        _isChatEnabled = !_isChatEnabled;
+                        isChatEnabled = !isChatEnabled;
+                        saveChatState(isChatEnabled);
                       });
                     }
                   ),
-                  title: Text(_isChatEnabled ? 'On' : 'Off', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
+                  title: Text(isChatEnabled ? 'On' : 'Off', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
+                  trailing: TextButton(
+                    onPressed: _isChatLoggedIn ? _handleChatLogout : _handleChatLogin,
+                    style: TextButton.styleFrom(
+                      foregroundColor: activeTheme['settings_text'],
+                    ),
+                    child: Text(
+                      _isChatLoggedIn ? 'Logout' : 'Login',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ),
 
                 Text('― Info ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
@@ -501,15 +693,16 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                   ),
 
                   // Chat Panel (slides up from bottom) ------------------------------------------------
-                  if (_isChatEnabled)
+                  if (isChatEnabled)
                     Consumer(
                       builder: (context, ref, child) {
-                        final messages = ref.watch(chatProvider);
+                        final messages = ref.watch(chat_providers.chatProvider);
                         return ChatPanel(
                           slideAnimation: _chatSlideAnimation,
                           theme: activeTheme,
                           heightFactor: _chatHeightFactor,
                           messages: messages,
+                          onSendMessage: _sendChatMessage,
                           onHeightFactorChanged: (value) {
                             setState(() {
                               _chatHeightFactor = value;
@@ -527,7 +720,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                     ),
 
                   // Chat button (bottom-right corner) ------------------------------------------------
-                  if (_isChatEnabled)
+                  if (isChatEnabled)
                     Positioned(
                       bottom: 15,
                       right: 10,
@@ -579,7 +772,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                     builder: (context, child) {
                       final double panelHeight =
                           screenHeight * _chatHeightFactor;
-                      final double offsetY = _isChatEnabled
+                      final double offsetY = isChatEnabled
                           ? -(panelHeight / 2) * _chatSlideAnimation.value
                           : 0;
                       final double baseSpacing = 0; // No spacing between logo and button

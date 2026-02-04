@@ -11,6 +11,7 @@ class ChatPanel extends StatefulWidget {
   final ValueChanged<double> onHeightFactorChanged;
   final ValueChanged<double>? onDragDelta;
   final List<ChatMessage> messages;
+  final Function(String)? onSendMessage;
 
   const ChatPanel({
     super.key,
@@ -20,6 +21,7 @@ class ChatPanel extends StatefulWidget {
     required this.onHeightFactorChanged,
     this.onDragDelta,
     this.messages = const [],
+    this.onSendMessage,
   });
 
   @override
@@ -29,20 +31,44 @@ class ChatPanel extends StatefulWidget {
 class _ChatPanelState extends State<ChatPanel> {
   double _lastHeight = 0;
   late ScrollController _scrollController;
+  late TextEditingController _messageController;
+  late FocusNode _messageFocusNode;
   bool _isScrolledUp = false;
+  bool _wasHidden = true;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _messageController = TextEditingController();
+    _messageFocusNode = FocusNode();
     _scrollController.addListener(_onScrollChange);
+    widget.slideAnimation.addListener(_handleSlideAnimation);
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScrollChange);
     _scrollController.dispose();
+    _messageController.dispose();
+    _messageFocusNode.dispose();
+    widget.slideAnimation.removeListener(_handleSlideAnimation);
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.slideAnimation != widget.slideAnimation) {
+      oldWidget.slideAnimation.removeListener(_handleSlideAnimation);
+      widget.slideAnimation.addListener(_handleSlideAnimation);
+    }
+
+    if (widget.messages.length != oldWidget.messages.length && !_isScrolledUp) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _jumpToBottom();
+      });
+    }
   }
 
   void _onScrollChange() {
@@ -63,6 +89,30 @@ class _ChatPanelState extends State<ChatPanel> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
+    }
+  }
+
+  void _jumpToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    }
+  }
+
+  void _handleSlideAnimation() {
+    final isHidden = widget.slideAnimation.value == 0;
+    if (_wasHidden && !isHidden) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _jumpToBottom();
+      });
+    }
+    _wasHidden = isHidden;
+  }
+
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+    if (text.isNotEmpty && widget.onSendMessage != null) {
+      widget.onSendMessage!(text);
+      _messageController.clear();
     }
   }
 
@@ -186,6 +236,7 @@ class _ChatPanelState extends State<ChatPanel> {
                                                 text: message.message,
                                                 style: TextStyle(
                                                   color: activeTheme['chat_icon_bg'],
+                                                  fontWeight: FontWeight.w600,
                                                   decoration: message.isStruckThrough
                                                       ? TextDecoration.lineThrough
                                                       : null,
@@ -235,6 +286,10 @@ class _ChatPanelState extends State<ChatPanel> {
                       padding: const EdgeInsets.fromLTRB(12, 24, 80, 12),
                       color: activeTheme['chat_icon_fg'],
                       child: TextField(
+                        controller: _messageController,
+                        focusNode: _messageFocusNode,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
                         style: TextStyle(
                           color: activeTheme['chat_icon_bg'],
                         ),
