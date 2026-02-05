@@ -7,13 +7,14 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:swarm_fm_app/main.dart';
 import 'package:swarm_fm_app/packages/animations.dart';
 import 'package:swarm_fm_app/packages/credits.dart';
-import 'package:swarm_fm_app/packages/popup.dart';
+import 'package:swarm_fm_app/packages/popups/popup.dart';
 import 'package:swarm_fm_app/packages/chat_panel.dart';
 import 'package:swarm_fm_app/packages/providers/chat_providers.dart' as chat_providers;
 import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
-import 'package:swarm_fm_app/packages/twitch_login_popup.dart';
+import 'package:swarm_fm_app/packages/popups/twitch_login_inappwebview.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:swarm_fm_app/packages/popups/twitch_login_instructions.dart';
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends ConsumerStatefulWidget {
@@ -27,7 +28,6 @@ class SwarmFMPlayerPage extends ConsumerStatefulWidget {
 class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     with TickerProviderStateMixin {
 
-  bool _isChatEnabled = true;
   bool _isChatOpen = false;
   bool _isChatLoggedIn = false;
   final ChatManager _chatManager = ChatManager();
@@ -129,40 +129,12 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     // No existing session, show instructions then launch Twitch login popup
     if (!mounted) return;
     
-    final shouldProceed = await showDialog<bool>(
+    final shouldProceedPopup = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Twitch Login'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'To enable chat, you need to log in with Twitch:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            Text('1. Click the Twitch login button in the web player'),
-            SizedBox(height: 8),
-            Text('2. Complete the Twitch authentication'),
-            SizedBox(height: 8),
-            Text('3. Press "Done" button at the top when finished'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
+      builder: (context) => const TwitchLoginInstructionsPopup()
     );
 
-    if (shouldProceed != true || !mounted) return;
+    if (shouldProceedPopup != true || !mounted) return;
     
     final result = await showDialog(
       context: context,
@@ -691,80 +663,6 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                       ],
                     )
                   ),
-
-                  // Chat Panel (slides up from bottom) ------------------------------------------------
-                  if (isChatEnabled)
-                    Consumer(
-                      builder: (context, ref, child) {
-                        final messages = ref.watch(chat_providers.chatProvider);
-                        return ChatPanel(
-                          slideAnimation: _chatSlideAnimation,
-                          theme: activeTheme,
-                          heightFactor: _chatHeightFactor,
-                          messages: messages,
-                          onSendMessage: _sendChatMessage,
-                          onHeightFactorChanged: (value) {
-                            setState(() {
-                              _chatHeightFactor = value;
-                            });
-                          },
-                          onDragDelta: (deltaRatio) {
-                            setState(() {
-                              const double rotationsPerScreen = 6;
-                              _chatButtonDragAngle +=
-                                  -deltaRatio * (2 * pi * rotationsPerScreen);
-                            });
-                          },
-                        );
-                      },
-                    ),
-
-                  // Chat button (bottom-right corner) ------------------------------------------------
-                  if (isChatEnabled)
-                    Positioned(
-                      bottom: 15,
-                      right: 10,
-                      child: AnimatedBuilder(
-                        animation: Listenable.merge([
-                          _chatSlideAnimation,
-                          _chatButtonSpinController,
-                        ]),
-                        builder: (context, child) {
-                          final double spinAngle = _chatButtonSpinAnimation.value;
-                          return Transform.rotate(
-                            angle: (_chatButtonDragAngle + spinAngle),
-                            child: GestureDetector(
-                              onTap: _toggleChat,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  // Background layer
-                                  SvgPicture.asset(
-                                    'assets/images/icons/chat-icon-bg.svg',
-                                    width: 56,
-                                    height: 56,
-                                    colorFilter: ColorFilter.mode(
-                                      activeTheme['chat_icon_bg'],
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                  // Foreground layer
-                                  SvgPicture.asset(
-                                    'assets/images/icons/chat-icon.svg',
-                                    width: 56,
-                                    height: 56,
-                                    colorFilter: ColorFilter.mode(
-                                      activeTheme['chat_icon_fg'],
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
                   
                   // Main player controls ------------------------------------------------
                   AnimatedBuilder(
@@ -839,6 +737,80 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                       );
                     },
                   ),
+
+                  // Chat Panel (slides up from bottom) ------------------------------------------------
+                  if (isChatEnabled)
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final messages = ref.watch(chat_providers.chatProvider);
+                        return ChatPanel(
+                          slideAnimation: _chatSlideAnimation,
+                          theme: activeTheme,
+                          heightFactor: _chatHeightFactor,
+                          messages: messages,
+                          onSendMessage: _sendChatMessage,
+                          onHeightFactorChanged: (value) {
+                            setState(() {
+                              _chatHeightFactor = value;
+                            });
+                          },
+                          onDragDelta: (deltaRatio) {
+                            setState(() {
+                              const double rotationsPerScreen = 6;
+                              _chatButtonDragAngle +=
+                                  -deltaRatio * (2 * pi * rotationsPerScreen);
+                            });
+                          },
+                        );
+                      },
+                    ),
+
+                  // Chat button (bottom-right corner) ------------------------------------------------
+                  if (isChatEnabled)
+                    Positioned(
+                      bottom: 15,
+                      right: 10,
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _chatSlideAnimation,
+                          _chatButtonSpinController,
+                        ]),
+                        builder: (context, child) {
+                          final double spinAngle = _chatButtonSpinAnimation.value;
+                          return Transform.rotate(
+                            angle: (_chatButtonDragAngle + spinAngle),
+                            child: GestureDetector(
+                              onTap: _toggleChat,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Background layer
+                                  SvgPicture.asset(
+                                    'assets/images/icons/chat-icon-bg.svg',
+                                    width: 56,
+                                    height: 56,
+                                    colorFilter: ColorFilter.mode(
+                                      activeTheme['chat_icon_bg'],
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
+                                  // Foreground layer
+                                  SvgPicture.asset(
+                                    'assets/images/icons/chat-icon.svg',
+                                    width: 56,
+                                    height: 56,
+                                    colorFilter: ColorFilter.mode(
+                                      activeTheme['chat_icon_fg'],
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                 ]
               );
             }

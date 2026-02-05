@@ -2,17 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:swarm_fm_app/main.dart';
 
 class TwitchLoginPopup extends StatefulWidget {
   const TwitchLoginPopup({super.key});
 
   @override
-  _TwitchLoginPopupState createState() => _TwitchLoginPopupState();
+  State<TwitchLoginPopup> createState() => _TwitchLoginPopupState();
 }
 
 class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
   final ChatManager _chatManager = ChatManager();
-  InAppWebViewController? _webViewController;
 
   Future<void> _handleDone() async {
     try {
@@ -53,6 +53,7 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: activeTheme['settings_bg'],
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.95,
         maxHeight: MediaQuery.of(context).size.height * 0.9,
@@ -63,17 +64,28 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                const Expanded(
+                // Title
+                Expanded(
                   child: Text(
                     'Swarm FM Player - Login',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: activeTheme['settings_text']),
                   ),
                 ),
-                TextButton(
+                // Done button
+                ElevatedButton(
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStateProperty.all(activeTheme['settings_bg']),
+                    shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                        side: BorderSide(color: activeTheme['settings_text']!, width: 2),
+                      ),
+                    ),
+                  ),
                   onPressed: _handleDone,
-                  child: const Text(
+                  child: Text(
                     'Done',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: activeTheme['settings_text']),
                   ),
                 ),
                 IconButton(
@@ -84,6 +96,7 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
             ),
           ),
           const Divider(height: 1),
+          // WebView
           Expanded(
             child: InAppWebView(
               initialUrlRequest: URLRequest(
@@ -95,9 +108,6 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
                 thirdPartyCookiesEnabled: true,
                 userAgent: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
               ),
-              onWebViewCreated: (controller) {
-                _webViewController = controller;
-              },
               onLoadStart: (controller, url) {
                 print('Loading: $url');
               },

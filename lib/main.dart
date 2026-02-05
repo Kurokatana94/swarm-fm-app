@@ -76,7 +76,27 @@ class MyApp extends StatelessWidget {
       child: LockOrientation( 
         child: MaterialApp(
           title: 'Swarm FM Player',
-          theme: ThemeData(fontFamily: 'First Coffee'),
+          theme: ThemeData(
+            fontFamily: 'First Coffee',
+            textButtonTheme: TextButtonThemeData(
+              style: ButtonStyle(
+                  shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  )
+                ),
+              ),
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ButtonStyle(
+                  shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  )
+                ),
+              ),
+            ),
+          ),
           debugShowCheckedModeBanner: false,
           home: SwarmFMPlayerPage(isFirstLaunch: isFirstLaunch,),
         )
@@ -136,7 +156,7 @@ void changeTheme(String themeName) {
 // It simply returns the active stream url, but in future might change depending on how the system evolves ------------------------------------------------
 String getStreamUrl() {
   final randomInt = Random().nextInt(1047) + 1;
-  return activeAudioService == "HLS" ? 'https://stream.sw.arm.fm/new/hls_audio.m3u8' : 'https://swarmfm.boopdev.com/assets/music/$randomInt.mp3';
+  return activeAudioService == "HLS" ? 'https://stream.sw.arm.fm/new/hls_audio.m3u8' : 'https://swarmfm.boopdev.com/assets/music/$randomInt.mp3'; //TODO NEW DATA FROM HERE --> https://swarmfm-assets.boopdev.com/music/HASHED_CODE_HERE.mp3
 }
 
 // Themes saving ------------------------------------------------

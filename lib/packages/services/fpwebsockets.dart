@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_client/web_socket_client.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 class FPWebsockets {
   late final WebSocket io;

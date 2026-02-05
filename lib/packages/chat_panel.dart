@@ -157,6 +157,10 @@ class _ChatPanelState extends State<ChatPanel> {
           height: panelHeight,
           child: Container(
             color: null,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16)
+            ),
             child: Stack(
               children: [
                 Column(

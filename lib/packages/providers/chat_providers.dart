@@ -61,7 +61,7 @@ class ChatManager extends StateNotifier<List<ChatMessage>> {
 
 final chatProvider = StateNotifierProvider<ChatManager, List<ChatMessage>>((
   ref,
-) {
+  ) {
   return ChatManager(ref);
 });
 
