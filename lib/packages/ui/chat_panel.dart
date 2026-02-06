@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:swarm_fm_app/main.dart';
-import 'models/chat_models.dart';
-import 'utils/chat_utils.dart';
+import '../models/chat_models.dart';
+import '../utils/chat_utils.dart';
 
 class ChatPanel extends StatefulWidget {
   final Animation<double> slideAnimation;

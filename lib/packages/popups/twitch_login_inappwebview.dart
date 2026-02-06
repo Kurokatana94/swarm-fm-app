@@ -13,13 +13,62 @@ class TwitchLoginPopup extends StatefulWidget {
 
 class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
   final ChatManager _chatManager = ChatManager();
+  InAppWebViewController? _webViewController;
 
   Future<void> _handleDone() async {
+    print('👤 [WEBVIEW] _handleDone() called');
+    
+    // Try to extract username from the page using JavaScript
+    String? username;
+    if (_webViewController != null) {
+      try {
+        print('👤 [WEBVIEW] Executing JavaScript to extract username...');
+        // Try to get the username from the page - adjust the selector as needed
+        final result = await _webViewController!.evaluateJavascript(source: '''
+          (function() {
+            // Look for the account-name span element
+            const accountNameElement = document.querySelector('.account-name');
+            if (accountNameElement && accountNameElement.textContent) {
+              return accountNameElement.textContent.trim();
+            }
+            
+            // Fallback: Try to find the username in common locations
+            const userElement = document.querySelector('[data-username]') || 
+                                document.querySelector('.username') ||
+                                document.querySelector('.user-name');
+            if (userElement) {
+              return userElement.textContent || userElement.getAttribute('data-username');
+            }
+            
+            // Last resort: Try to find text that contains "Logged in as"
+            const bodyText = document.body.innerText;
+            const match = bodyText.match(/Logged in as[:\\s]+([^\\s\\n]+)/i);
+            if (match && match[1]) {
+              return match[1];
+            }
+            
+            return null;
+          })()
+        ''');
+        
+        if (result != null && result.toString().isNotEmpty && result.toString() != 'null') {
+          username = result.toString();
+          print('👤 [WEBVIEW] Username extracted from page: $username');
+        } else {
+          print('👤 [WEBVIEW] Could not extract username from page');
+        }
+      } catch (e) {
+        print('👤 [WEBVIEW] Error extracting username: $e');
+      }
+    }
+    
     try {
       final cookieManager = CookieManager.instance();
+      print('👤 [WEBVIEW] Getting cookies from player.sw.arm.fm...');
       final cookies = await cookieManager.getCookies(
         url: WebUri('https://player.sw.arm.fm'),
       );
+      print('👤 [WEBVIEW] Found ${cookies.length} cookies');
 
       final sessionCookie = cookies.firstWhere(
         (cookie) => cookie.name == 'swarm_fm_player_session',
@@ -27,12 +76,21 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
       );
 
       if (sessionCookie.name.isNotEmpty) {
-        print('Session cookie found: ${sessionCookie.value}');
+        print('👤 [WEBVIEW] Session cookie found: ${sessionCookie.value}');
         await _chatManager.saveSession(sessionCookie.value);
+        
+        // Save username if we extracted it
+        if (username != null && username.isNotEmpty) {
+          print('👤 [WEBVIEW] Saving extracted username: $username');
+          await _chatManager.saveUsername(username);
+        }
+        
+        print('👤 [WEBVIEW] Session saved, returning username or true');
         if (mounted) {
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pop(username ?? true);
         }
       } else {
+        print('👤 [WEBVIEW] ❌ No session cookie found');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -43,7 +101,7 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
         }
       }
     } catch (e) {
-      print('Error getting cookie: $e');
+      print('👤 [WEBVIEW] ❌ Error getting cookie: $e');
       if (mounted) {
         Navigator.of(context).pop(false);
       }
@@ -99,6 +157,10 @@ class _TwitchLoginPopupState extends State<TwitchLoginPopup> {
           // WebView
           Expanded(
             child: InAppWebView(
+              onWebViewCreated: (controller) {
+                _webViewController = controller;
+                print('👤 [WEBVIEW] WebView controller created');
+              },
               initialUrlRequest: URLRequest(
                 url: WebUri('https://player.sw.arm.fm/'),
               ),

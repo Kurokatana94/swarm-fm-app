@@ -5,7 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:swarm_fm_app/managers/audio_handler.dart';
-import 'package:swarm_fm_app/packages/main_page.dart';
+import 'package:swarm_fm_app/packages/ui/main_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:permission_handler/permission_handler.dart';

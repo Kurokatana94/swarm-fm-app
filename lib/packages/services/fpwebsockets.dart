@@ -59,35 +59,66 @@ class FPWebsockets {
 
   Future<String> authorise(String session) async {
     bool connected = false;
+    bool authSent = false;
     StreamSubscription? msgstream;
     String name = '';
     bool nameset = false;
+    bool authSuccessReceived = false;
     final stream = io.connection.listen((state) {
-      if (state.toString() == "Instance of 'Connected'") {
+      if (state.toString() == "Instance of 'Connected'" && !authSent) {
         connected = true;
         msgstream = io.messages.listen((message) {
           final decoded = jsonDecode(message);
-          if (decoded['type'] == 'user_join') {
+          print('🔐 Auth flow - received message: $decoded');
+          
+          // Handle auth_success response
+          if (decoded['type'] == 'auth_success' && !nameset && decoded['name'] != null) {
+            name = decoded['name'];
+            nameset = true;
+            authSuccessReceived = true;
+            print('🔐 Auth - auth_success received with name: $name');
+          }
+          
+          // Handle "Already authenticated" - session is still valid
+          if (decoded['type'] == 'error' && decoded['message'] == 'Already authenticated' && !nameset) {
+            print('🔐 Auth - Already authenticated (session still valid)');
+            authSuccessReceived = true;
+            // Don't set nameset yet, wait for user_join to get the actual username
+          }
+          
+          // Wait for user_join
+          if (decoded['type'] == 'user_join' && !nameset && decoded['name'] != null) {
             msgstream!.cancel();
             name = decoded['name'];
             nameset = true;
+            print('🔐 Auth - user_join received with name: $name');
           }
         });
         final body = jsonEncode({"type": "authenticate", "session": session});
+        print('🔐 Auth - sending authenticate message with session: $session');
         io.send(body);
-        authsent = true;
+        authSent = true;
+        this.authsent = true;
       }
     });
     while (!connected) {
       await Future.delayed(const Duration(seconds: 1));
     }
     int namesetattempts = 0;
+    // If we got "Already authenticated", we still need to wait for user_join to get the username
+    // But if that doesn't come, we can return success after a shorter timeout
     while (!nameset && namesetattempts < 10) {
       await Future.delayed(const Duration(seconds: 1));
       namesetattempts++;
+      // If we got auth_success or already_authenticated but no user_join after 3 seconds, something's wrong
+      if (authSuccessReceived && namesetattempts > 3) {
+        print('🔐 Auth - auth succeeded but no user_join received, continuing anyway');
+        break;
+      }
     }
     stream.cancel();
     msgstream?.cancel();
+    print('🔐 Auth - authorise() returning name: "$name" (nameset=$nameset, authSuccess=$authSuccessReceived)');
     return name;
   }
 
@@ -113,5 +144,9 @@ class FPWebsockets {
     listen?.cancel();
     listen2?.cancel();
     io.close();
+  }
+
+  void resetAuthState() {
+    authsent = false;
   }
 }

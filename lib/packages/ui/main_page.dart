@@ -5,16 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:swarm_fm_app/main.dart';
-import 'package:swarm_fm_app/packages/animations.dart';
-import 'package:swarm_fm_app/packages/credits.dart';
-import 'package:swarm_fm_app/packages/popups/popup.dart';
-import 'package:swarm_fm_app/packages/chat_panel.dart';
+import 'package:swarm_fm_app/packages/components/animations.dart';
+import 'package:swarm_fm_app/packages/popups/battery_warning_popup.dart';
+import 'package:swarm_fm_app/packages/ui/chat_panel.dart';
 import 'package:swarm_fm_app/packages/providers/chat_providers.dart' as chat_providers;
 import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
-import 'package:swarm_fm_app/managers/chat_manager.dart';
-import 'package:swarm_fm_app/packages/popups/twitch_login_inappwebview.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:swarm_fm_app/packages/popups/twitch_login_instructions.dart';
+import 'package:swarm_fm_app/packages/ui/drawer.dart';
+import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends ConsumerStatefulWidget {
@@ -29,8 +26,6 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     with TickerProviderStateMixin {
 
   bool _isChatOpen = false;
-  bool _isChatLoggedIn = false;
-  final ChatManager _chatManager = ChatManager();
   double _chatHeightFactor = 1 / 3;
   double _chatButtonDragAngle = 0;
   late AnimationController _chatAnimationController;
@@ -65,10 +60,6 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
       _initializeChat();
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadChatLoginState();
-    });
-
     if (Platform.isAndroid && widget.isFirstLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showBatterySettingsPopup(context);
@@ -92,135 +83,6 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     }
   }
 
-  Future<void> _loadChatLoginState() async {
-    final loggedIn = await _chatManager.isLoggedIn();
-    if (mounted) {
-      setState(() {
-        _isChatLoggedIn = loggedIn;
-      });
-    }
-  }
-
-
-  Future<void> _handleChatLogin() async {
-    if (!mounted) return;
-
-    // Check for existing session cookie first
-    final cookieManager = CookieManager.instance();
-    try {
-      final cookies = await cookieManager.getCookies(
-        url: WebUri('https://player.sw.arm.fm'),
-      );
-
-      final sessionCookie = cookies.firstWhere(
-        (cookie) => cookie.name == 'swarm_fm_player_session',
-        orElse: () => Cookie(name: ''),
-      );
-
-      if (sessionCookie.name.isNotEmpty) {
-        print('Found existing session cookie, attempting login...');
-        await _loginWithSessionToken(sessionCookie.value);
-        return;
-      }
-    } catch (e) {
-      print('Error checking session cookie: $e');
-    }
-
-    // No existing session, show instructions then launch Twitch login popup
-    if (!mounted) return;
-    
-    final shouldProceedPopup = await showDialog<bool>(
-      context: context,
-      builder: (context) => const TwitchLoginInstructionsPopup()
-    );
-
-    if (shouldProceedPopup != true || !mounted) return;
-    
-    final result = await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const TwitchLoginPopup(),
-    );
-
-    // Handle the result from the popup
-    if (result == true) {
-      // Session was saved by the popup, now authenticate
-      final session = await _chatManager.fetchSession();
-      if (session != null && session.isNotEmpty) {
-        await _loginWithSessionToken(session);
-      }
-    } else if (result is String && result.isNotEmpty) {
-      // Got an auth code (if needed for future implementation)
-      print('Received auth code: $result');
-    }
-  }
-
-  Future<void> _loginWithSessionToken(String sessionToken) async {
-    print('=== MANUAL SESSION LOGIN ===');
-    print('Session token: $sessionToken');
-
-    try {
-      await _chatManager.saveSession(sessionToken);
-      final fpWebsockets = ref.read(fpWebsocketsProvider);
-
-      print('Calling authorize() with session: $sessionToken');
-      final username = await fpWebsockets.authorise(sessionToken).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          print('Authorization timed out after 10 seconds');
-          return '';
-        },
-      );
-      print('Authorize returned - Username: "$username"');
-
-      if (mounted) {
-        if (username.isNotEmpty) {
-          setState(() {
-            _isChatLoggedIn = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Logged in as $username'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Login failed. Please try again.'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('Error in _loginWithSessionToken: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Login error: $e'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleChatLogout() async {
-    final cookieManager = CookieManager.instance();
-    await _chatManager.clearSession();
-    try {
-      await cookieManager.deleteAllCookies();
-    } catch (e) {
-      print('Error clearing cookies: $e');
-    }
-    if (mounted) {
-      setState(() {
-        _isChatLoggedIn = false;
-      });
-    }
-  }
-
   @override
   void dispose() {
     _chatAnimationController.dispose();
@@ -228,8 +90,9 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     super.dispose();
   }
 
-  void _sendChatMessage(String message) {
-    if (_isChatLoggedIn) {
+  void _sendChatMessage(String message) async {
+    final isLoggedIn = ref.read(chatLoginProvider);
+    if (isLoggedIn) {
       final fpWebsockets = ref.read(fpWebsocketsProvider);
       fpWebsockets.sendChatMessage(message);
     } else {
@@ -328,179 +191,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
           ),
 
           // Drawer settings menu ------------------------------------------------
-          drawer: Drawer(
-            backgroundColor: activeTheme['settings_bg'],
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                Padding(
-                  padding:  EdgeInsets.only(top: 40, bottom: 20), 
-                  child: Text('Settings', style: TextStyle(color: activeTheme['settings_title'], fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                ),
-
-                Text('― Themes ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
-
-                // Theme selection options ------------------------------------------------ 
-                // Neuro Theme
-                ListTile(
-                  leading: IgnorePointer(
-                    child: Switch(
-                      value: isNeuroTheme,
-                      inactiveThumbColor: activeTheme['settings_text'],
-                      activeThumbColor: activeTheme['settings_bg'],
-                      activeTrackColor: activeTheme['settings_text'],
-                      inactiveTrackColor: activeTheme['settings_bg'],
-                      onChanged: (isNeuroTheme) {}
-                    ),
-                  ),
-                  title: Text('Neuro', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  onTap: () {
-                    setState(() {
-                      isNeuroTheme = true;
-                      isEvilTheme = false;
-                      isVedalTheme = false;
-                      String name = 'neuro';
-                      changeTheme(name);
-                      saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
-                    });
-                  },
-                ),
-
-                // Evil Theme
-                ListTile(
-                  leading: IgnorePointer(
-                    child: Switch(
-                      value: isEvilTheme,
-                      inactiveThumbColor: activeTheme['settings_text'],
-                      activeThumbColor: activeTheme['settings_bg'],
-                      activeTrackColor: activeTheme['settings_text'],
-                      inactiveTrackColor: activeTheme['settings_bg'],
-                      onChanged: (isEvilTheme) {}
-                    ),
-                  ),
-                  title: Text('Evil', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  onTap: () {
-                    setState(() {
-                      isNeuroTheme = false;
-                      isEvilTheme = true;
-                      isVedalTheme = false;
-                      String name = 'evil';
-                      changeTheme(name);
-                      saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
-                    });
-                  },
-                ),
-
-                // Vedal Theme
-                ListTile(
-                  leading: IgnorePointer(
-                    child: Switch(
-                      value: isVedalTheme,
-                      inactiveThumbColor: activeTheme['settings_text'],
-                      activeThumbColor: activeTheme['settings_bg'],
-                      activeTrackColor: activeTheme['settings_text'],
-                      inactiveTrackColor: activeTheme['settings_bg'],
-                      onChanged: (isVedalTheme) {}
-                    ),
-                  ),
-                  title: Text('Vedal', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  onTap: () {
-                    setState(() {
-                      isNeuroTheme = false;
-                      isEvilTheme = false;
-                      isVedalTheme = true;
-                      String name = 'vedal';
-                      changeTheme(name);
-                      saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
-                    });
-                  },
-                ),
-
-                Text('― Audio Service ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
-
-                ListTile(
-                  leading: IgnorePointer(
-                    child: Switch(
-                      value: activeAudioService == "HLS",
-                      inactiveThumbColor: activeTheme['settings_text'],
-                      activeThumbColor: activeTheme['settings_bg'],
-                      activeTrackColor: activeTheme['settings_text'],
-                      inactiveTrackColor: activeTheme['settings_bg'],
-                      onChanged: (_) {}
-                    ),
-                  ),
-                  title: Text('HLS', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  onTap: () {
-                    setState(() {
-                      activeAudioService = "HLS";
-                      saveAudioServiceState(activeAudioService);
-                    });
-                  },
-                ),
-
-                ListTile(
-                  leading: IgnorePointer(
-                    child: Switch(
-                      value: activeAudioService == "SHUFFLE",
-                      inactiveThumbColor: activeTheme['settings_text'],
-                      activeThumbColor: activeTheme['settings_bg'],
-                      activeTrackColor: activeTheme['settings_text'],
-                      inactiveTrackColor: activeTheme['settings_bg'],
-                      onChanged: (_) {}
-                    ),
-                  ),
-                  title: Text('Shuffle', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  onTap: () {
-                    setState(() {
-                      activeAudioService = "SHUFFLE";
-                      saveAudioServiceState(activeAudioService);
-                    });
-                  },
-                ),
-                
-                Text('― Chat ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
-                
-                // Twitch Chat Options ------------------------------------------------
-                ListTile(
-                  leading: Switch(
-                    value: isChatEnabled,
-                    inactiveThumbColor: activeTheme['settings_text'],
-                    activeThumbColor: activeTheme['settings_bg'],
-                    activeTrackColor: activeTheme['settings_text'],
-                    inactiveTrackColor: activeTheme['settings_bg'],
-                    onChanged: (_) {
-                      setState(() {
-                        isChatEnabled = !isChatEnabled;
-                        saveChatState(isChatEnabled);
-                      });
-                    }
-                  ),
-                  title: Text(isChatEnabled ? 'On' : 'Off', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  trailing: TextButton(
-                    onPressed: _isChatLoggedIn ? _handleChatLogout : _handleChatLogin,
-                    style: TextButton.styleFrom(
-                      foregroundColor: activeTheme['settings_text'],
-                    ),
-                    child: Text(
-                      _isChatLoggedIn ? 'Logout' : 'Login',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-
-                Text('― Info ―', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center,),
-
-                // Credits page ------------------------------------------------
-                ListTile(
-                  leading: Icon(Icons.info, color: activeTheme['settings_text'],),
-                  title: Text('Credits', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute<void>(builder: (context) => Credits(theme: activeTheme)));
-                  },
-                ),
-              ],
-            ),
-          ),
+          drawer: AppDrawer(), 
           
           backgroundColor: activeTheme['main_bg'],
           

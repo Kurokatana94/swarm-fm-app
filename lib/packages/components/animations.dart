@@ -10,7 +10,7 @@ class RotatingCog extends StatefulWidget {
   const RotatingCog({super.key ,required this.icon, this.isSpinning = true, this.clockwise = true, this.duration = 5, this.size = 100});
 
   @override
-  _RotatingCogState createState() => _RotatingCogState();
+  State<RotatingCog> createState() => _RotatingCogState();
 }
 
 class _RotatingCogState extends State<RotatingCog> with SingleTickerProviderStateMixin {
