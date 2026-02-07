@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_models.dart';
 import '../providers/chat_providers.dart';
-import '../utils/chat_utils.dart';
+import '../../utils/general_utils.dart';
 
 class ChatMessageView extends ConsumerWidget {
   final ChatMessage message;
@@ -29,24 +29,45 @@ class ChatMessageView extends ConsumerWidget {
 
   Widget _buildMessageWithEmotes(
     BuildContext context,
-    List<SevenTVEmote> emoteList,
+    List<ChatEmote> emoteList,
   ) {
-    final emotes = {for (var e in emoteList) e.name: e};
+    final emotes = {for (var e in emoteList) e.name.toLowerCase(): e};
     final List<InlineSpan> spans = [];
     final words = message.message.split(' ');
     final List<InlineSpan> textSpans = [];
+    final tokenRegex = RegExp(r'^([^A-Za-z0-9_]*)([A-Za-z0-9_]+)([^A-Za-z0-9_]*)$');
+
+    String _extractCore(String token) {
+      final match = tokenRegex.firstMatch(token);
+      if (match == null) return token;
+      return match.group(2) ?? token;
+    }
+
+    void _addTextSpan(String text) {
+      if (text.isEmpty) return;
+      textSpans.add(
+        TextSpan(
+          text: text,
+          style: message.isStruckThrough
+              ? TextStyle(decoration: TextDecoration.lineThrough, color: textColor)
+              : TextStyle(color: textColor),
+        ),
+      );
+    }
 
     for (int i = 0; i < words.length; i++) {
       final word = words[i];
-      final emote = emotes[word];
+      final coreWord = _extractCore(word);
+      final emote = emotes[coreWord.toLowerCase()];
 
       if (emote != null && !emote.zeroWidth) {
         // This is a base emote, check for subsequent zero-width emotes
-        final List<SevenTVEmote> zeroWidthEmotes = [];
+        final List<ChatEmote> zeroWidthEmotes = [];
         int j = i + 1;
         while (j < words.length) {
           final nextWord = words[j];
-          final nextEmote = emotes[nextWord];
+          final nextCore = _extractCore(nextWord);
+          final nextEmote = emotes[nextCore.toLowerCase()];
           if (nextEmote != null && nextEmote.zeroWidth) {
             zeroWidthEmotes.add(nextEmote);
             j++;
@@ -71,12 +92,12 @@ class ChatMessageView extends ConsumerWidget {
             width: maxWidth,
             height: emoteHeight,
             child: Image.network(
-              '${emote.url}/2x.webp',
+              emote.url2x,
               height: emoteHeight,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
                 return Image.network(
-                  '${emote.url}/1x.webp',
+                  emote.url1x,
                   height: emoteHeight,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
@@ -95,12 +116,12 @@ class ChatMessageView extends ConsumerWidget {
               width: maxWidth,
               height: emoteHeight,
               child: Image.network(
-                '${zeroWidthEmote.url}/2x.webp',
+                zeroWidthEmote.url2x,
                 height: emoteHeight,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
                   return Image.network(
-                    '${zeroWidthEmote.url}/1x.webp',
+                    zeroWidthEmote.url1x,
                     height: emoteHeight,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
@@ -113,34 +134,27 @@ class ChatMessageView extends ConsumerWidget {
           );
         }
 
+        final match = tokenRegex.firstMatch(word);
+        final leading = match?.group(1) ?? '';
+        final trailing = match?.group(3) ?? '';
+
+        _addTextSpan(leading);
         textSpans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: Stack(alignment: Alignment.center, children: stackChildren),
           ),
         );
+        _addTextSpan(trailing);
+        _addTextSpan(' ');
 
         i = j - 1; // Move index past the consumed zero-width emotes
       } else if (emote != null && emote.zeroWidth) {
         // Standalone zero-width emote, render as text
-        textSpans.add(
-          TextSpan(
-            text: '$word ',
-            style: message.isStruckThrough
-                ? const TextStyle(decoration: TextDecoration.lineThrough)
-                : null,
-          ),
-        );
+        _addTextSpan('$word ');
       } else {
         // Regular word
-        textSpans.add(
-          TextSpan(
-            text: '$word ',
-            style: message.isStruckThrough
-                ? const TextStyle(decoration: TextDecoration.lineThrough)
-                : null,
-          ),
-        );
+        _addTextSpan('$word ');
       }
     }
 
@@ -163,7 +177,7 @@ class ChatMessageView extends ConsumerWidget {
           ),
           TextSpan(
             style: message.isStruckThrough
-                ? const TextStyle(decoration: TextDecoration.lineThrough, fontWeight: FontWeight.bold,)
+                ? TextStyle(decoration: TextDecoration.lineThrough, fontWeight: FontWeight.bold, color: displayColor)
                 : null,
             children: spans,
           ),

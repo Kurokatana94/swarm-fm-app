@@ -49,11 +49,3 @@ Color getColorForUsernameColor(String username) {
   Color color = Color(int.parse('0xFF$colorHex'));
   return color;
 }
-
-Color parseColorFromHex(String colorHex) {
-  try {
-    return Color(int.parse('0xFF${colorHex.replaceAll('#', '')}'));
-  } catch (e) {
-    return Colors.white;
-  }
-}

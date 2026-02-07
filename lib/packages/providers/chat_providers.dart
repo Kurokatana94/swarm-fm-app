@@ -1,12 +1,27 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swarm_fm_app/packages/models/chat_models.dart';
 import 'package:swarm_fm_app/packages/services/emote_service.dart';
+import 'package:swarm_fm_app/managers/chat_manager.dart';
 
 // Emote Providers
 final emoteServiceProvider = Provider((ref) => EmoteService());
 
-final sevenTVEmotesProvider = FutureProvider<List<SevenTVEmote>>((ref) async {
+final sevenTVEmotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
   final emoteService = ref.watch(emoteServiceProvider);
+  final chatManager = ChatManager();
+
+  const twitchChannelIds = <int>[
+    85498365, // vedal987
+    56418014, // annytf
+    469632185, // camila
+    825937345, // Ellie_Minibot
+    852880224, // cerberVT
+    1004060561, // MinikoMew
+    32173571, // chrchie
+    99728740, // alexvoid
+    64140092, // LaynaLazar
+    542237669, // toma
+  ];
 
   const emoteSets = {
     'vedal': "01GN2QZDS0000BKRM8E4JJD3NV",
@@ -14,23 +29,70 @@ final sevenTVEmotesProvider = FutureProvider<List<SevenTVEmote>>((ref) async {
     'swarmfm_emotes': "01JKCF444J7HTNKE4TEQ0DBP1F",
   };
 
-  final allEmotes = <SevenTVEmote>[];
+  final mergedEmotes = <String, ChatEmote>{};
+
+  const twitchClientId = String.fromEnvironment('TWITCH_CLIENT_ID', defaultValue: '');
+  const twitchClientSecret = String.fromEnvironment('TWITCH_CLIENT_SECRET', defaultValue: '');
+
+  if (twitchClientId.isNotEmpty && twitchClientSecret.isNotEmpty) {
+    try {
+      final appToken = await emoteService.getTwitchAppAccessToken(
+        twitchClientId,
+        twitchClientSecret,
+      );
+
+      final globalEmotes = await emoteService.getTwitchGlobalEmotes(
+        twitchClientId,
+        appToken,
+      );
+      for (final emote in globalEmotes) {
+        mergedEmotes[emote.name] = emote;
+      }
+
+      for (final channelId in twitchChannelIds) {
+        final channelEmotes = await emoteService.getTwitchChannelEmotes(
+          twitchClientId,
+          appToken,
+          channelId,
+        );
+        for (final emote in channelEmotes) {
+          mergedEmotes[emote.name] = emote;
+        }
+      }
+    } catch (e) {
+      print('Error loading Twitch app emotes: $e');
+    }
+  }
+
+  final session = await chatManager.fetchSession();
+  if (session != null && session.isNotEmpty) {
+    try {
+      final twitchEmotes = await emoteService.getTwitchUserEmotes(session);
+      for (final emote in twitchEmotes) {
+        mergedEmotes[emote.name] = emote;
+      }
+    } catch (e) {
+      print('Error loading Twitch user emotes: $e');
+    }
+  }
 
   for (final emoteSetId in emoteSets.values) {
     try {
       final emotes = await emoteService.getSevenTVEmoteSet(emoteSetId);
-      allEmotes.addAll(emotes);
+      for (final emote in emotes) {
+        mergedEmotes[emote.name] = ChatEmote.fromSevenTV(emote);
+      }
     } catch (e) {
       print('Error loading emote set: $e');
     }
   }
 
-  return allEmotes;
+  return mergedEmotes.values.toList();
 });
 
 // Chat Providers
-class ChatManager extends StateNotifier<List<ChatMessage>> {
-  ChatManager(this.ref) : super([]);
+class ChatStateManager extends StateNotifier<List<ChatMessage>> {
+  ChatStateManager(this.ref) : super([]);
   final Ref ref;
 
   void addMessage(ChatMessage message) {
@@ -59,10 +121,10 @@ class ChatManager extends StateNotifier<List<ChatMessage>> {
   }
 }
 
-final chatProvider = StateNotifierProvider<ChatManager, List<ChatMessage>>((
+final chatProvider = StateNotifierProvider<ChatStateManager, List<ChatMessage>>((
   ref,
   ) {
-  return ChatManager(ref);
+  return ChatStateManager(ref);
 });
 
 // Connection Status

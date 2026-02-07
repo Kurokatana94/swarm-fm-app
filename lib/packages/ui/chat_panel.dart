@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:swarm_fm_app/main.dart';
+import 'package:swarm_fm_app/packages/components/chat_message_view.dart';
 import '../models/chat_models.dart';
-import '../utils/chat_utils.dart';
+import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ChatPanel extends StatefulWidget {
+class ChatPanel extends ConsumerStatefulWidget {
   final Animation<double> slideAnimation;
   final Map<dynamic, dynamic> theme;
   final double heightFactor;
@@ -25,10 +26,10 @@ class ChatPanel extends StatefulWidget {
   });
 
   @override
-  State<ChatPanel> createState() => _ChatPanelState();
+  ConsumerState<ChatPanel> createState() => _ChatPanelState();
 }
 
-class _ChatPanelState extends State<ChatPanel> {
+class _ChatPanelState extends ConsumerState<ChatPanel> {
   double _lastHeight = 0;
   late ScrollController _scrollController;
   late TextEditingController _messageController;
@@ -134,6 +135,9 @@ class _ChatPanelState extends State<ChatPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final themeState = ref.watch(themeProvider);
+    final activeTheme = themeState.theme;
+    
     return AnimatedBuilder(
       animation: widget.slideAnimation,
       builder: (context, child) {
@@ -159,7 +163,7 @@ class _ChatPanelState extends State<ChatPanel> {
             color: null,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16)
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Stack(
               children: [
@@ -198,6 +202,7 @@ class _ChatPanelState extends State<ChatPanel> {
                         ),
                       )
                     ),
+
                     // Chat messages area with scrolling
                     Expanded(
                       child: Stack(
@@ -220,39 +225,18 @@ class _ChatPanelState extends State<ChatPanel> {
                                     itemCount: widget.messages.length,
                                     itemBuilder: (context, index) {
                                       final message = widget.messages[index];
-                                      final displayColor = message.nameColor.isNotEmpty
-                                          ? parseColorFromHex(message.nameColor)
-                                          : activeTheme['chat_icon_bg'];
-                                      
+
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 8),
-                                        child: RichText(
-                                          text: TextSpan(
-                                            children: [
-                                              TextSpan(
-                                                text: '${message.name}: ',
-                                                style: TextStyle(
-                                                  color: displayColor,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              TextSpan(
-                                                text: message.message,
-                                                style: TextStyle(
-                                                  color: activeTheme['chat_icon_bg'],
-                                                  fontWeight: FontWeight.w600,
-                                                  decoration: message.isStruckThrough
-                                                      ? TextDecoration.lineThrough
-                                                      : null,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                        child: ChatMessageView(
+                                          message: message,
+                                          textColor: activeTheme['chat_icon_bg']!,
+                                          backgroundColor: activeTheme['chat_icon_fg']!,)
                                       );
                                     },
                                   ),
                           ),
+
                           // "Go to Latest Messages" button
                           if (_isScrolledUp)
                             Positioned(
@@ -318,12 +302,24 @@ class _ChatPanelState extends State<ChatPanel> {
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide(
                               color: activeTheme['chat_icon_bg'],
-                              width: 3
+                              width: 3,
                             ),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 8,
+                          ),
+                          // Emoji button as suffix icon
+                          suffixIcon: Focus(
+                            canRequestFocus: false,
+                            skipTraversal: true,
+                            child: IconButton(
+                              onPressed: () {},
+                              icon: Icon(
+                                Icons.emoji_emotions_outlined,
+                                color: activeTheme['chat_icon_bg'],
+                              ),
+                            ),
                           ),
                         ),
                       ),

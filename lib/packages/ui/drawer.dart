@@ -8,6 +8,7 @@ import 'package:swarm_fm_app/packages/ui/credits.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
 import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
+import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
 
 class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key});
@@ -133,17 +134,8 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         print('👤 [LOGIN FLOW] Got username from webview: $result');
         final session = await _chatManager.fetchSession();
         if (session != null && session.isNotEmpty) {
-          // Username already saved by webview, just mark as logged in
-          ref.read(chatLoginProvider.notifier).setLoggedIn(true);
-          setState(() => _isLoggingIn = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Logged in as $result'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
+          // Ensure websocket auth is performed even if username was extracted.
+          await _loginWithSessionToken(session);
         }
       } else {
         // Fallback to WebSocket authentication if no username from webview
@@ -188,6 +180,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final themeState = ref.watch(themeProvider);
+    final activeTheme = themeState.theme;
+    
     return Drawer(
       backgroundColor: activeTheme['settings_bg'],
       child: ListView(
@@ -205,24 +200,17 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
           ListTile(
             leading: IgnorePointer(
               child: Switch(
-                value: isNeuroTheme,
+                value: themeState.themeName == 'neuro',
                 inactiveThumbColor: activeTheme['settings_text'],
                 activeThumbColor: activeTheme['settings_bg'],
                 activeTrackColor: activeTheme['settings_text'],
                 inactiveTrackColor: activeTheme['settings_bg'],
-                onChanged: (isNeuroTheme) {}
+                onChanged: (_) {}
               ),
             ),
             title: Text('Neuro', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
             onTap: () {
-              setState(() {
-                isNeuroTheme = true;
-                isEvilTheme = false;
-                isVedalTheme = false;
-                String name = 'neuro';
-                changeTheme(name);
-                saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
-              });
+              ref.read(themeProvider.notifier).changeTheme('neuro');
             },
           ),
 
@@ -230,24 +218,17 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
           ListTile(
             leading: IgnorePointer(
               child: Switch(
-                value: isEvilTheme,
+                value: themeState.themeName == 'evil',
                 inactiveThumbColor: activeTheme['settings_text'],
                 activeThumbColor: activeTheme['settings_bg'],
                 activeTrackColor: activeTheme['settings_text'],
                 inactiveTrackColor: activeTheme['settings_bg'],
-                onChanged: (isEvilTheme) {}
+                onChanged: (_) {}
               ),
             ),
             title: Text('Evil', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
             onTap: () {
-              setState(() {
-                isNeuroTheme = false;
-                isEvilTheme = true;
-                isVedalTheme = false;
-                String name = 'evil';
-                changeTheme(name);
-                saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
-              });
+              ref.read(themeProvider.notifier).changeTheme('evil');
             },
           ),
 
@@ -255,24 +236,17 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
           ListTile(
             leading: IgnorePointer(
               child: Switch(
-                value: isVedalTheme,
+                value: themeState.themeName == 'vedal',
                 inactiveThumbColor: activeTheme['settings_text'],
                 activeThumbColor: activeTheme['settings_bg'],
                 activeTrackColor: activeTheme['settings_text'],
                 inactiveTrackColor: activeTheme['settings_bg'],
-                onChanged: (isVedalTheme) {}
+                onChanged: (_) {}
               ),
             ),
             title: Text('Vedal', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
             onTap: () {
-              setState(() {
-                isNeuroTheme = false;
-                isEvilTheme = false;
-                isVedalTheme = true;
-                String name = 'vedal';
-                changeTheme(name);
-                saveThemeState(name, isNeuroTheme, isEvilTheme, isVedalTheme);
-              });
+              ref.read(themeProvider.notifier).changeTheme('vedal');
             },
           ),
 

@@ -90,6 +90,62 @@ class SevenTVEmote {
   }
 }
 
+class ChatEmote {
+  final String name;
+  final String url1x;
+  final String url2x;
+  final int width;
+  final int height;
+  final bool zeroWidth;
+
+  const ChatEmote({
+    required this.name,
+    required this.url1x,
+    required this.url2x,
+    required this.width,
+    required this.height,
+    required this.zeroWidth,
+  });
+
+  factory ChatEmote.fromSevenTV(SevenTVEmote emote) {
+    return ChatEmote(
+      name: emote.name,
+      url1x: '${emote.url}/1x.webp',
+      url2x: '${emote.url}/2x.webp',
+      width: emote.width,
+      height: emote.height,
+      zeroWidth: emote.zeroWidth,
+    );
+  }
+
+  factory ChatEmote.fromTwitchUserEmote(Map<String, dynamic> json) {
+    final formats = (json['format'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+    final scales = (json['scale'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+    final themes = (json['theme_mode'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+
+    final format = formats.contains('animated') ? 'animated' : 'static';
+    final theme = themes.contains('light') ? 'light' : (themes.isNotEmpty ? themes.first : 'dark');
+    final scale1x = scales.contains('1.0') ? '1.0' : (scales.isNotEmpty ? scales.first : '1.0');
+    final scale2x = scales.contains('2.0') ? '2.0' : (scales.isNotEmpty ? scales.last : scale1x);
+
+    final id = json['id']?.toString() ?? '';
+    final name = json['name']?.toString() ?? '';
+
+    String buildUrl(String scale) {
+      return 'https://static-cdn.jtvnw.net/emoticons/v2/$id/$format/$theme/$scale';
+    }
+
+    return ChatEmote(
+      name: name,
+      url1x: buildUrl(scale1x),
+      url2x: buildUrl(scale2x),
+      width: 28,
+      height: 28,
+      zeroWidth: false,
+    );
+  }
+}
+
 class Timeout {
   final DateTime timeoutTime;
 

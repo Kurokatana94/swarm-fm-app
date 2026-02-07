@@ -12,6 +12,8 @@ import 'package:swarm_fm_app/packages/providers/chat_providers.dart' as chat_pro
 import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 import 'package:swarm_fm_app/packages/ui/drawer.dart';
 import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
+import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
+import 'package:swarm_fm_app/managers/chat_manager.dart';
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends ConsumerStatefulWidget {
@@ -96,12 +98,26 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
       final fpWebsockets = ref.read(fpWebsocketsProvider);
       fpWebsockets.sendChatMessage(message);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please log in to send messages'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      final chatManager = ChatManager();
+      final session = await chatManager.fetchSession();
+      if (session != null && session.isNotEmpty) {
+        final fpWebsockets = ref.read(fpWebsocketsProvider);
+        final username = await fpWebsockets.authorise(session);
+        if (username.isNotEmpty && mounted) {
+          ref.read(chatLoginProvider.notifier).setLoggedIn(true);
+          fpWebsockets.sendChatMessage(message);
+          return;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to send messages'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -140,6 +156,9 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
   // Build the UI ------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    final themeState = ref.watch(themeProvider);
+    final activeTheme = themeState.theme;
+    
     return LayoutBuilder( 
       builder: (BuildContext context, BoxConstraints constraints) {
         final double screenWidth = constraints.maxWidth;
