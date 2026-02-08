@@ -14,6 +14,7 @@ import 'package:swarm_fm_app/packages/ui/drawer.dart';
 import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
 import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
+import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
 
 // Main Player Page ------------------------------------------------
 class SwarmFMPlayerPage extends ConsumerStatefulWidget {
@@ -158,6 +159,8 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
   Widget build(BuildContext context) {
     final themeState = ref.watch(themeProvider);
     final activeTheme = themeState.theme;
+
+    final isChatEnabled = ref.watch(isChatEnabledProvider);
     
     return LayoutBuilder( 
       builder: (BuildContext context, BoxConstraints constraints) {

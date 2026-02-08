@@ -9,6 +9,7 @@ import 'package:swarm_fm_app/managers/chat_manager.dart';
 import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
 import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
+import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
 
 class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key});
@@ -182,6 +183,8 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   Widget build(BuildContext context) {
     final themeState = ref.watch(themeProvider);
     final activeTheme = themeState.theme;
+
+    final isChatEnabled = ref.watch(isChatEnabledProvider);
     
     return Drawer(
       backgroundColor: activeTheme['settings_bg'],
@@ -303,10 +306,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
               activeTrackColor: activeTheme['settings_text'],
               inactiveTrackColor: activeTheme['settings_bg'],
               onChanged: (_) {
-                setState(() {
-                  isChatEnabled = !isChatEnabled;
-                  saveChatState(isChatEnabled);
-                });
+                ref.read(isChatEnabledProvider.notifier).toggleChat();
               }
             ),
             // TODO FIX

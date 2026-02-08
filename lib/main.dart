@@ -23,8 +23,6 @@ String activeAudioService = "HLS";
 bool isHls = true;
 bool isShuffle = false;
 
-bool isChatEnabled = true;
-
 late AudioHandler audioHandler;
 late FPWebsockets fpWebsockets;
 
@@ -196,20 +194,7 @@ Future<void> loadAudioServiceState() async {
   isHls = activeAudioService == "HLS";
 }
 
-Future<void> saveChatState(bool isChatEnabled) async {
-  final prefs = await SharedPreferences.getInstance();
-
-  await prefs.setBool('isChatEnabled', isChatEnabled);
-}
-
-Future<void> loadChatState() async {
-  final prefs = await SharedPreferences.getInstance();
-
-  isChatEnabled = prefs.getBool('isChatEnabled') ?? true;
-}
-
 Future<void> _loadPrefsStates() async {
   await loadThemeState();
   await loadAudioServiceState();
-  await loadChatState();
 }

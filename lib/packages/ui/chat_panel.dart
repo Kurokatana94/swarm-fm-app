@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:swarm_fm_app/packages/components/chat_message_view.dart';
 import '../models/chat_models.dart';
 import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
+import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ChatPanel extends ConsumerStatefulWidget {
@@ -115,6 +116,113 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
       widget.onSendMessage!(text);
       _messageController.clear();
     }
+  }
+
+  void _showEmotePicker(BuildContext context, List<ChatEmote> emotes) {
+    // Group emotes by channel (infer from URL or name patterns)
+    final grouped = <String, List<ChatEmote>>{};
+    for (final emote in emotes) {
+      final group = _groupEmoteBySource(emote);
+      grouped.putIfAbsent(group, () => []).add(emote);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        final themeState = ref.watch(themeProvider);
+        final activeTheme = themeState.theme;
+        
+        return Container(
+          color: activeTheme['chat_icon_fg'],
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Select Emote',
+                  style: TextStyle(
+                    color: activeTheme['chat_icon_bg'],
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  children: grouped.entries.map((entry) {
+                    return ExpansionTile(
+                      title: Text(
+                        entry.key,
+                        style: TextStyle(
+                          color: activeTheme['chat_icon_bg'],
+                        ),
+                      ),
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: entry.value.map((emote) {
+                            return GestureDetector(
+                              onTap: () {
+                                _messageController.text += '${emote.name} ';
+                                Navigator.pop(context);
+                                _messageFocusNode.requestFocus();
+                              },
+                              child: Tooltip(
+                                message: emote.name,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: activeTheme['chat_icon_bg']!,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  padding: const EdgeInsets.all(4),
+                                  child: Image.network(
+                                    emote.url2x,
+                                    width: 32,
+                                    height: 32,
+                                    errorBuilder: (context, error, stack) {
+                                      return SizedBox(
+                                        width: 32,
+                                        height: 32,
+                                        child: Center(
+                                          child: Text(
+                                            '?',
+                                            style: TextStyle(
+                                              color: activeTheme['chat_icon_bg'],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _groupEmoteBySource(ChatEmote emote) {
+    // Infer group from URL or name
+    if (emote.url1x.contains('7tv.app')) {
+      return '7TV';
+    } else if (emote.url1x.contains('jtvnw.net')) {
+      return 'Twitch';
+    }
+    return 'Other';
   }
 
   void _onDragUpdate(DragUpdateDetails details, double screenHeight) {
@@ -314,7 +422,12 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                             canRequestFocus: false,
                             skipTraversal: true,
                             child: IconButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                final emotesAsyncValue = ref.read(sevenTVEmotesProvider);
+                                emotesAsyncValue.whenData((emotes) {
+                                  _showEmotePicker(context, emotes);
+                                });
+                              },
                               icon: Icon(
                                 Icons.emoji_emotions_outlined,
                                 color: activeTheme['chat_icon_bg'],

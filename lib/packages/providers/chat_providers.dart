@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swarm_fm_app/packages/models/chat_models.dart';
 import 'package:swarm_fm_app/packages/services/emote_service.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Emote Providers
 final emoteServiceProvider = Provider((ref) => EmoteService());
@@ -94,7 +95,7 @@ final sevenTVEmotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
 class ChatStateManager extends StateNotifier<List<ChatMessage>> {
   ChatStateManager(this.ref) : super([]);
   final Ref ref;
-
+  
   void addMessage(ChatMessage message) {
     final newState = [...state, message];
     state = newState.length > 175
@@ -146,8 +147,29 @@ class ConnectionManager extends StateNotifier<Map<String, dynamic>> {
   }
 }
 
-final connectionProvider =
-    StateNotifierProvider<ConnectionManager, Map<String, dynamic>>((ref) {
+// Chat Enabled State with async loading
+class ChatEnabledNotifier extends StateNotifier<bool> {
+  ChatEnabledNotifier() : super(true) {
+    _loadState();
+  }
+
+  Future<void> _loadState() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool('isChatEnabled') ?? true;
+  }
+
+  Future<void> toggleChat() async {
+    state = !state;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isChatEnabled', state);
+  }
+}
+
+final isChatEnabledProvider = StateNotifierProvider<ChatEnabledNotifier, bool>((ref) {
+  return ChatEnabledNotifier();
+});
+
+final connectionProvider = StateNotifierProvider<ConnectionManager, Map<String, dynamic>>((ref) {
       return ConnectionManager(ref);
     });
 
@@ -193,3 +215,4 @@ class ErrorNotifier extends StateNotifier<ErrorState> {
 final errorProvider = StateNotifierProvider<ErrorNotifier, ErrorState>((ref) {
   return ErrorNotifier();
 });
+
