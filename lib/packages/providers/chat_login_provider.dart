@@ -6,11 +6,18 @@ import 'package:swarm_fm_app/packages/providers/websocket_provider.dart';
 class ChatLoginNotifier extends StateNotifier<bool> {
   final Ref ref;
   final ChatManager _chatManager = ChatManager();
+  bool _isInitialized = false;
 
   ChatLoginNotifier(this.ref) : super(false);
 
-  // Load and validate session on initialization
+  // Load and validate session on initialization (only once)
   Future<void> loadLoginState() async {
+    if (_isInitialized) {
+      print('👤 [LOGIN STATE] Already initialized, skipping loadLoginState()');
+      return;
+    }
+    _isInitialized = true;
+    
     print('👤 [LOGIN STATE] loadLoginState() checking if already logged in...');
     final session = await _chatManager.fetchSession();
     
@@ -31,12 +38,13 @@ class ChatLoginNotifier extends StateNotifier<bool> {
           await _chatManager.saveUsername(username);
           state = true;
         } else {
-          print('👤 [LOGIN STATE] Session validation failed, clearing session');
+          print('👤 [LOGIN STATE] Session validation failed (empty username), clearing session');
           await _chatManager.clearSession();
           state = false;
         }
       } catch (e) {
         print('👤 [LOGIN STATE] Error validating session: $e');
+        await _chatManager.clearSession();
         state = false;
       }
     } else {
@@ -52,11 +60,13 @@ class ChatLoginNotifier extends StateNotifier<bool> {
 
   // Clear login state and session
   Future<void> logout() async {
-    print('👤 [LOGIN STATE] logout() called');
+    print('👤 [LOGIN STATE] logout() called - clearing session and resetting auth state');
+    print('👤 [LOGIN STATE] Stack trace: ${StackTrace.current}');
     await _chatManager.clearSession();
     final fpWebsockets = ref.read(fpWebsocketsProvider);
     fpWebsockets.resetAuthState();
     state = false;
+    print('👤 [LOGIN STATE] logout() completed - user is now logged out');
   }
 }
 

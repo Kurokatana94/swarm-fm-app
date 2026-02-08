@@ -11,6 +11,7 @@ import 'package:swarm_fm_app/themes/themes.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:lock_orientation_screen/lock_orientation_screen.dart';
 import 'package:swarm_fm_app/packages/services/fpwebsockets.dart';
+import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -60,7 +61,15 @@ Future<void> main() async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   bool? isFirstLaunch = prefs.getBool('isFirstLaunch') ?? true;
 
-  runApp(MyApp(isFirstLaunch: isFirstLaunch,));
+  final container = ProviderContainer();
+  await container.read(chatLoginProvider.notifier).loadLoginState();
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: MyApp(isFirstLaunch: isFirstLaunch),
+    ),
+  );
 }
 
 // App init ------------------------------------------------

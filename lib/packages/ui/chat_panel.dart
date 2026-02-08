@@ -4,6 +4,7 @@ import 'package:swarm_fm_app/packages/components/chat_message_view.dart';
 import '../models/chat_models.dart';
 import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
 import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
+import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ChatPanel extends ConsumerStatefulWidget {
@@ -246,6 +247,8 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final themeState = ref.watch(themeProvider);
     final activeTheme = themeState.theme;
     
+    final isUserLoggedIn = ref.watch(chatLoginProvider);
+
     return AnimatedBuilder(
       animation: widget.slideAnimation,
       builder: (context, child) {
@@ -382,6 +385,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                       padding: const EdgeInsets.fromLTRB(12, 24, 80, 12),
                       color: activeTheme['chat_icon_fg'],
                       child: TextField(
+                        readOnly: !isUserLoggedIn,
                         controller: _messageController,
                         focusNode: _messageFocusNode,
                         textInputAction: TextInputAction.send,
@@ -390,7 +394,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                           color: activeTheme['chat_icon_bg'],
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Send a message',
+                          hintText: !isUserLoggedIn ? 'Login to send messages' : 'Send a message',
                           hintStyle: TextStyle(
                             color: activeTheme['chat_icon_bg']?.withOpacity(0.7),
                           ),

@@ -159,9 +159,12 @@ class ChatEnabledNotifier extends StateNotifier<bool> {
   }
 
   Future<void> toggleChat() async {
-    state = !state;
+    final newState = !state;
+    print('💬 [CHAT STATE] Toggling chat from ${state} to ${newState}');
+    state = newState;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isChatEnabled', state);
+    print('💬 [CHAT STATE] Chat toggled and saved to preferences: ${state}');
   }
 }
 

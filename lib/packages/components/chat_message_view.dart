@@ -31,7 +31,7 @@ class ChatMessageView extends ConsumerWidget {
     BuildContext context,
     List<ChatEmote> emoteList,
   ) {
-    final emotes = {for (var e in emoteList) e.name.toLowerCase(): e};
+    final emotes = {for (var e in emoteList) e.name: e};
     final List<InlineSpan> spans = [];
     final words = message.message.split(' ');
     final List<InlineSpan> textSpans = [];
@@ -58,7 +58,7 @@ class ChatMessageView extends ConsumerWidget {
     for (int i = 0; i < words.length; i++) {
       final word = words[i];
       final coreWord = _extractCore(word);
-      final emote = emotes[coreWord.toLowerCase()];
+      final emote = emotes[coreWord];
 
       if (emote != null && !emote.zeroWidth) {
         // This is a base emote, check for subsequent zero-width emotes
@@ -67,7 +67,7 @@ class ChatMessageView extends ConsumerWidget {
         while (j < words.length) {
           final nextWord = words[j];
           final nextCore = _extractCore(nextWord);
-          final nextEmote = emotes[nextCore.toLowerCase()];
+          final nextEmote = emotes[nextCore];
           if (nextEmote != null && nextEmote.zeroWidth) {
             zeroWidthEmotes.add(nextEmote);
             j++;
