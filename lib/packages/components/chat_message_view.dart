@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_models.dart';
 import '../providers/chat_providers.dart';
@@ -22,11 +23,12 @@ class ChatMessageView extends ConsumerWidget {
 
     return emotesAsyncValue.when(
       data: (emotes) => _buildMessageWithEmotes(context, emotes),
-      loading: () => _buildPlainMessage(),
-      error: (err, stack) => _buildPlainMessage(),
+      loading: () => _buildPlainMessage(context),
+      error: (err, stack) => _buildPlainMessage(context),
     );
   }
 
+  // Builds the message with emotes, handling zero-width emotes and proper stacking
   Widget _buildMessageWithEmotes(
     BuildContext context,
     List<ChatEmote> emoteList,
@@ -164,56 +166,72 @@ class ChatMessageView extends ConsumerWidget {
         ? parseColorFromHex(message.nameColor)
         : textColor;
 
-    final richText = RichText(
-      text: TextSpan(
-        style: DefaultTextStyle.of(context).style,
-        children: [
-          TextSpan(
-            text: message.name == null ? '' : '${message.name}: ',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: displayColor,
+    final richText = GestureDetector(
+      onLongPress: () {
+        Clipboard.setData(ClipboardData(text: message.message));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Message copied to clipboard')),
+        );
+      },
+      child: RichText(
+        text: TextSpan(
+          style: DefaultTextStyle.of(context).style,
+          children: [
+            TextSpan(
+              text: message.name == null ? '' : '${message.name}: ',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: displayColor,
+              ),
             ),
-          ),
-          TextSpan(
-            style: message.isStruckThrough
-                ? TextStyle(decoration: TextDecoration.lineThrough, fontWeight: FontWeight.bold, color: displayColor)
-                : null,
-            children: spans,
-          ),
-        ],
+            TextSpan(
+              style: message.isStruckThrough
+                  ? TextStyle(decoration: TextDecoration.lineThrough, fontWeight: FontWeight.bold, color: displayColor)
+                  : null,
+              children: spans,
+            ),
+          ],
+        ),
       ),
     );
-
     return richText;
   }
 
-  Widget _buildPlainMessage() {
+  // Fallback plain message rendering while emotes are loading or if there's an error
+  Widget _buildPlainMessage(BuildContext context) {
     final displayColor = message.nameColor.isNotEmpty
         ? parseColorFromHex(message.nameColor)
         : textColor;
 
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '${message.name}: ',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: displayColor,
+    return GestureDetector(
+      onLongPress: () {
+        Clipboard.setData(ClipboardData(text: message.message));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Message copied to clipboard')),
+        );
+      },
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '${message.name}: ',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: displayColor,
+              ),
             ),
-          ),
-          TextSpan(
-            text: message.message,
-            style: TextStyle(
-              decoration: message.isStruckThrough
-                  ? TextDecoration.lineThrough
-                  : null,
-              fontWeight: FontWeight.bold,
-              color: textColor,
+            TextSpan(
+              text: message.message,
+              style: TextStyle(
+                decoration: message.isStruckThrough
+                    ? TextDecoration.lineThrough
+                    : null,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

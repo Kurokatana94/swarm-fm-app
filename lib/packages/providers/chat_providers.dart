@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swarm_fm_app/packages/models/chat_models.dart';
 import 'package:swarm_fm_app/packages/services/emote_service.dart';
@@ -279,4 +280,38 @@ class ErrorNotifier extends StateNotifier<ErrorState> {
 final errorProvider = StateNotifierProvider<ErrorNotifier, ErrorState>((ref) {
   return ErrorNotifier();
 });
+
+final chatScrollProvider = StateNotifierProvider<ChatScrollNotifier, double>((ref) => ChatScrollNotifier());
+
+class ChatScrollNotifier extends StateNotifier<double> {
+  ScrollController? _controller;
+
+  ChatScrollNotifier() : super(0.0);
+
+  void setController(ScrollController controller) {
+    _controller = controller;
+    _controller!.addListener(_updatePosition);
+  }
+
+  void _updatePosition() {
+    if (_controller!.hasClients) {
+      state = _controller!.offset;
+    }
+  }
+
+  void scrollBy(double delta) {
+    if (_controller?.hasClients ?? false) {
+      final newOffset = (_controller!.offset + delta).clamp(0.0, _controller!.position.maxScrollExtent);
+      _controller!.jumpTo(newOffset);
+    }
+  }
+
+  void setScrollOffset(double offset) {
+    if (_controller?.hasClients ?? false) {
+      _controller!.jumpTo(offset.clamp(0.0, _controller!.position.maxScrollExtent));
+    }
+  }
+
+  double get maxScrollExtent => _controller?.position.maxScrollExtent ?? 0.0;
+}
 

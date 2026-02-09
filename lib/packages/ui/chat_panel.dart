@@ -50,6 +50,7 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     _messageFocusNode = FocusNode();
     _scrollController.addListener(_onScrollChange);
     widget.slideAnimation.addListener(_handleSlideAnimation);
+    ref.read(chatScrollProvider.notifier).setController(_scrollController);
   }
 
   @override
@@ -158,8 +159,9 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
           _lastHeight = panelHeight;
         }
         
-        // Slide from bottom using animation value (0 = hidden, 1 = fully visible)
-        final offset = panelHeight * (1 - widget.slideAnimation.value);
+        // Add 3px extra so panel goes below viewport a couple frames early,
+        // preventing a visible last-pixel snap.
+        final offset = (panelHeight + 3) * (1 - widget.slideAnimation.value);
 
         final double rackWidth = 20.0;
 

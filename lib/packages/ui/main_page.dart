@@ -27,6 +27,9 @@ class SwarmFMPlayerPage extends ConsumerStatefulWidget {
 // Main Player Page Active State ------------------------------------------------
 class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     with TickerProviderStateMixin {
+  static const double _buttonSize = 56.0;
+  static const double _buttonBottomInset = 15.0;
+  static const double _rotationsPerPanel = 6.0;
 
   bool _isChatOpen = false;
   double _chatHeightFactor = 1 / 3;
@@ -35,6 +38,14 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
   late Animation<double> _chatSlideAnimation;
   late AnimationController _chatButtonSpinController;
   late Animation<double> _chatButtonSpinAnimation;
+
+  double _buttonBottom = _buttonBottomInset;
+  bool _isDraggingButton = false;
+  ProviderSubscription<double>? _scrollSubscription;
+  double _dragStartBottom = _buttonBottomInset;
+  double _dragStartDy = 0.0;
+  bool _isAnimatingClose = false;
+  double _buttonBottomBeforeClose = _buttonBottomInset;
 
   @override
   void initState() {
@@ -50,12 +61,36 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
       CurvedAnimation(parent: _chatAnimationController, curve: Curves.easeInOut),
     );
 
+    _chatAnimationController.addListener(_onCloseAnimationTick);
+    _chatAnimationController.addStatusListener(_onCloseAnimationStatus);
+
     _chatButtonSpinController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     _chatButtonSpinAnimation = Tween<double>(begin: 0, end: 0).animate(
       CurvedAnimation(parent: _chatButtonSpinController, curve: Curves.easeInOut),
+    );
+
+    _scrollSubscription = ref.listenManual<double>(
+      chat_providers.chatScrollProvider,
+      (previous, next) {
+        if (!_isChatOpen || _isDraggingButton || previous == null) {
+          return;
+        }
+        final maxScroll = ref.read(chat_providers.chatScrollProvider.notifier).maxScrollExtent;
+        if (maxScroll <= 0) {
+          return;
+        }
+        final delta = next - previous;
+        if (delta == 0) {
+          return;
+        }
+        setState(() {
+          // Positive delta (scrolling down) rotates counterclockwise.
+          _chatButtonDragAngle -= (delta / maxScroll) * (2 * pi * _rotationsPerPanel);
+        });
+      },
     );
 
     // Initialize WebSocket and request chat history
@@ -88,6 +123,9 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
 
   @override
   void dispose() {
+    _scrollSubscription?.close();
+    _chatAnimationController.removeListener(_onCloseAnimationTick);
+    _chatAnimationController.removeStatusListener(_onCloseAnimationStatus);
     _chatAnimationController.dispose();
     _chatButtonSpinController.dispose();
     super.dispose();
@@ -122,11 +160,46 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
     }
   }
 
+  void _onCloseAnimationTick() {
+    if (_isAnimatingClose) {
+      setState(() {});
+    }
+  }
+
+  void _onCloseAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && _isAnimatingClose) {
+      setState(() {
+        _isAnimatingClose = false;
+        _buttonBottom = _buttonBottomInset;
+        // Zero drag angle AND spin animation together so total = 0 + 0 = straight.
+        _chatButtonDragAngle = 0;
+        _chatButtonSpinAnimation = Tween<double>(begin: 0, end: 0).animate(
+          CurvedAnimation(parent: _chatButtonSpinController, curve: Curves.easeInOut),
+        );
+      });
+      // Reset scroll to bottom AFTER animation completes to avoid heavy
+      // ListView relayout blocking animation frames.
+      final scrollNotifier = ref.read(chat_providers.chatScrollProvider.notifier);
+      scrollNotifier.setScrollOffset(scrollNotifier.maxScrollExtent);
+    }
+  }
+
   void _toggleChat() {
     final bool opening = !_isChatOpen;
+    if (!opening) {
+      // Save current button position before closing
+      _isAnimatingClose = true;
+      _buttonBottomBeforeClose = _buttonBottom;
+      debugPrint('TOGGLE CLOSE: saved=$_buttonBottomBeforeClose');
+    } else {
+      _isAnimatingClose = false;
+    }
     _startChatButtonSpin(opening: opening);
     setState(() {
       _isChatOpen = !_isChatOpen;
+      if (!_isChatOpen) {
+        _isDraggingButton = false;
+      }
     });
     if (_isChatOpen) {
       _chatAnimationController.forward();
@@ -217,10 +290,35 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
           
           backgroundColor: activeTheme['main_bg'],
           
+          // Main content with rotating cogs, player controls, and chat panel ------------------------------------------------
           body: LayoutBuilder( 
             builder: (BuildContext context, BoxConstraints constraints) {
               final double screenWidth = constraints.maxWidth;
               final double screenHeight = constraints.maxHeight;
+
+              final scrollOffset = ref.watch(chat_providers.chatScrollProvider);
+              final maxScroll = ref.read(chat_providers.chatScrollProvider.notifier).maxScrollExtent;
+              final panelHeight = screenHeight * _chatHeightFactor;
+              const minBottom = _buttonBottomInset;
+              final maxBottom = max(minBottom, panelHeight - _buttonSize);
+              final range = max(1.0, maxBottom - minBottom);
+              final fraction = maxScroll > 0 ? scrollOffset / maxScroll : 0.0;
+
+              // Compute visual button position
+              double chatButtonBottom;
+              if (_isAnimatingClose) {
+                // Move button down at same speed as panel, stop at original position
+                chatButtonBottom = max(
+                  _buttonBottomInset,
+                  _buttonBottomBeforeClose - panelHeight * (1 - _chatSlideAnimation.value),
+                );
+                debugPrint('BUILD CLOSE: bottom=$chatButtonBottom, slide=${_chatSlideAnimation.value}');
+              } else {
+                if (_isChatOpen && !_isDraggingButton) {
+                  _buttonBottom = minBottom + (1 - fraction) * range;
+                }
+                chatButtonBottom = _buttonBottom;
+              }
               return Stack ( 
                 children: [ 
                   Positioned(
@@ -465,7 +563,22 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                           onHeightFactorChanged: (value) {
                             setState(() {
                               _chatHeightFactor = value;
+                              final screenHeight = MediaQuery.of(context).size.height;
+                              final panelHeight = screenHeight * _chatHeightFactor;
+                              const minBottom = _buttonBottomInset;
+                              final maxBottom = max(minBottom, panelHeight - _buttonSize);
+                              _buttonBottom = _buttonBottom.clamp(minBottom, maxBottom);
                             });
+                            final scrollNotifier = ref.read(chat_providers.chatScrollProvider.notifier);
+                            final maxScroll = scrollNotifier.maxScrollExtent;
+                            const minBottom = _buttonBottomInset;
+                            final screenHeight = MediaQuery.of(context).size.height;
+                            final panelHeight = screenHeight * value;
+                            final maxBottom = max(minBottom, panelHeight - _buttonSize);
+                            final range = max(1.0, maxBottom - minBottom);
+                            final fraction = (_buttonBottom - minBottom) / range;
+                            final targetOffset = (1 - fraction) * maxScroll;
+                            scrollNotifier.setScrollOffset(targetOffset);
                           },
                           onDragDelta: (deltaRatio) {
                             setState(() {
@@ -481,7 +594,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                   // Chat button (bottom-right corner) ------------------------------------------------
                   if (isChatEnabled)
                     Positioned(
-                      bottom: 15,
+                      bottom: chatButtonBottom,
                       right: 10,
                       child: AnimatedBuilder(
                         animation: Listenable.merge([
@@ -492,36 +605,73 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                           final double spinAngle = _chatButtonSpinAnimation.value;
                           return Transform.rotate(
                             angle: (_chatButtonDragAngle + spinAngle),
-                            child: GestureDetector(
-                              onTap: _toggleChat,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  // Background layer
-                                  SvgPicture.asset(
-                                    'assets/images/icons/chat-icon-bg.svg',
-                                    width: 56,
-                                    height: 56,
-                                    colorFilter: ColorFilter.mode(
-                                      activeTheme['chat_icon_bg'],
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                  // Foreground layer
-                                  SvgPicture.asset(
-                                    'assets/images/icons/chat-icon.svg',
-                                    width: 56,
-                                    height: 56,
-                                    colorFilter: ColorFilter.mode(
-                                      activeTheme['chat_icon_fg'],
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            child: child!,
                           );
                         },
+                        child: GestureDetector(
+                          onTap: _toggleChat,
+                          onVerticalDragStart: !_isChatOpen
+                              ? null
+                              : (details) {
+                                  setState(() {
+                                    _isDraggingButton = true;
+                                    _dragStartBottom = _buttonBottom;
+                                    _dragStartDy = details.globalPosition.dy;
+                                  });
+                                },
+                          onVerticalDragEnd: !_isChatOpen
+                              ? null
+                              : (details) {
+                                  setState(() {
+                                    _isDraggingButton = false;
+                                  });
+                                },
+                          onVerticalDragUpdate: !_isChatOpen
+                              ? null
+                              : (details) {
+                                final dragDelta = details.globalPosition.dy - _dragStartDy;
+                                final newBottom = (_dragStartBottom - dragDelta)
+                                  .clamp(minBottom, maxBottom);
+                                final moved = newBottom - _buttonBottom;
+                                if (moved == 0) {
+                                  return;
+                                }
+                                setState(() {
+                                  _buttonBottom = newBottom;
+                                  _chatButtonDragAngle +=
+                                    (moved / range) * (2 * pi * _rotationsPerPanel);
+                                });
+                                final fraction = (newBottom - minBottom) / range;
+                                final targetOffset = (1 - fraction) * maxScroll;
+                                ref.read(chat_providers.chatScrollProvider.notifier)
+                                    .setScrollOffset(targetOffset);
+                              },
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Background layer
+                              SvgPicture.asset(
+                                'assets/images/icons/chat-icon-bg.svg',
+                                width: 56,
+                                height: 56,
+                                colorFilter: ColorFilter.mode(
+                                  activeTheme['chat_icon_bg'],
+                                  BlendMode.srcIn,
+                                ),
+                              ),
+                              // Foreground layer
+                              SvgPicture.asset(
+                                'assets/images/icons/chat-icon.svg',
+                                width: 56,
+                                height: 56,
+                                colorFilter: ColorFilter.mode(
+                                  activeTheme['chat_icon_fg'],
+                                  BlendMode.srcIn,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                 ]
