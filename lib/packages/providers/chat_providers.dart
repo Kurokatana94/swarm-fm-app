@@ -3,11 +3,53 @@ import 'package:swarm_fm_app/packages/models/chat_models.dart';
 import 'package:swarm_fm_app/packages/services/emote_service.dart';
 import 'package:swarm_fm_app/managers/chat_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 // Emote Providers
 final emoteServiceProvider = Provider((ref) => EmoteService());
 
-final sevenTVEmotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
+// Cached emotes provider - loads from cache immediately, refreshes in background
+final emotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  final cached = prefs.getString('cached_emotes');
+  
+  // Return cached emotes immediately if available
+  if (cached != null) {
+    try {
+      final List<dynamic> decoded = jsonDecode(cached);
+      final cachedEmotes = decoded.map((e) => ChatEmote(
+        name: e['name'],
+        url1x: e['url1x'],
+        url2x: e['url2x'],
+        width: e['width'],
+        height: e['height'],
+        zeroWidth: e['zeroWidth'],
+      )).toList();
+      
+      print('📦 Loaded ${cachedEmotes.length} emotes from cache');
+      
+      // Fetch fresh emotes in background without blocking
+      Future.microtask(() async {
+        try {
+          await _fetchAndCacheEmotes(ref);
+          print('🔄 Background emote refresh completed');
+        } catch (e) {
+          print('Error refreshing emotes in background: $e');
+        }
+      });
+      
+      return cachedEmotes;
+    } catch (e) {
+      print('Error loading cached emotes: $e');
+    }
+  }
+  
+  // No cache, fetch normally
+  print('📦 No cache found, fetching emotes...');
+  return await _fetchAndCacheEmotes(ref);
+});
+
+Future<List<ChatEmote>> _fetchAndCacheEmotes(Ref ref) async {
   final emoteService = ref.watch(emoteServiceProvider);
   final chatManager = ChatManager();
 
@@ -27,7 +69,9 @@ final sevenTVEmotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
   const emoteSets = {
     'vedal': "01GN2QZDS0000BKRM8E4JJD3NV",
     'swarmfm_whisper': "01JKCEZS0D4MGWVNGKQWBTWSYT",
+    'global_emotes': "01FB07T0M0000EAYZC08B1HH54",
     'swarmfm_emotes': "01JKCF444J7HTNKE4TEQ0DBP1F",
+    'swarmfm_emotes_2': "01K1H87ZZVE92Y3Z37H3ES6BK8",
   };
 
   final mergedEmotes = <String, ChatEmote>{};
@@ -88,18 +132,38 @@ final sevenTVEmotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
     }
   }
 
-  return mergedEmotes.values.toList();
-});
+  final emoteList = mergedEmotes.values.toList();
+  
+  // Cache the emotes
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheData = emoteList.map((e) => {
+      'name': e.name,
+      'url1x': e.url1x,
+      'url2x': e.url2x,
+      'width': e.width,
+      'height': e.height,
+      'zeroWidth': e.zeroWidth,
+    }).toList();
+    await prefs.setString('cached_emotes', jsonEncode(cacheData));
+  } catch (e) {
+    print('Error caching emotes: $e');
+  }
+  
+  return emoteList;
+}
 
 // Chat Providers
 class ChatStateManager extends StateNotifier<List<ChatMessage>> {
   ChatStateManager(this.ref) : super([]);
   final Ref ref;
+
+  final _maxMessages = 300;
   
   void addMessage(ChatMessage message) {
     final newState = [...state, message];
-    state = newState.length > 175
-        ? newState.sublist(newState.length - 175)
+    state = newState.length > _maxMessages
+        ? newState.sublist(newState.length - _maxMessages)
         : newState;
   }
 
@@ -159,12 +223,9 @@ class ChatEnabledNotifier extends StateNotifier<bool> {
   }
 
   Future<void> toggleChat() async {
-    final newState = !state;
-    print('💬 [CHAT STATE] Toggling chat from ${state} to ${newState}');
-    state = newState;
+    state = !state;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isChatEnabled', state);
-    print('💬 [CHAT STATE] Chat toggled and saved to preferences: ${state}');
   }
 }
 

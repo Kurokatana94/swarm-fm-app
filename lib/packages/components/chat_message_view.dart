@@ -18,7 +18,7 @@ class ChatMessageView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final emotesAsyncValue = ref.watch(sevenTVEmotesProvider);
+    final emotesAsyncValue = ref.watch(emotesProvider);
 
     return emotesAsyncValue.when(
       data: (emotes) => _buildMessageWithEmotes(context, emotes),

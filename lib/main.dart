@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:lock_orientation_screen/lock_orientation_screen.dart';
 import 'package:swarm_fm_app/packages/services/fpwebsockets.dart';
 import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
+import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
 
 Map activeTheme = themes['neuro'];
 
@@ -63,6 +64,9 @@ Future<void> main() async {
 
   final container = ProviderContainer();
   await container.read(chatLoginProvider.notifier).loadLoginState();
+  
+  // Pre-load emotes in background
+  container.read(emotesProvider);
 
   runApp(
     UncontrolledProviderScope(

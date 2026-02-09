@@ -6,6 +6,7 @@ import 'package:swarm_fm_app/packages/providers/theme_provider.dart';
 import 'package:swarm_fm_app/packages/providers/chat_providers.dart';
 import 'package:swarm_fm_app/packages/providers/chat_login_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../popups/emotes_selector.dart';
 
 class ChatPanel extends ConsumerStatefulWidget {
   final Animation<double> slideAnimation;
@@ -38,6 +39,8 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
   late FocusNode _messageFocusNode;
   bool _isScrolledUp = false;
   bool _wasHidden = true;
+
+  String targetGroup = 'jtvnw.net';
 
   @override
   void initState() {
@@ -119,113 +122,6 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     }
   }
 
-  void _showEmotePicker(BuildContext context, List<ChatEmote> emotes) {
-    // Group emotes by channel (infer from URL or name patterns)
-    final grouped = <String, List<ChatEmote>>{};
-    for (final emote in emotes) {
-      final group = _groupEmoteBySource(emote);
-      grouped.putIfAbsent(group, () => []).add(emote);
-    }
-
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        final themeState = ref.watch(themeProvider);
-        final activeTheme = themeState.theme;
-        
-        return Container(
-          color: activeTheme['chat_icon_fg'],
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Select Emote',
-                  style: TextStyle(
-                    color: activeTheme['chat_icon_bg'],
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  children: grouped.entries.map((entry) {
-                    return ExpansionTile(
-                      title: Text(
-                        entry.key,
-                        style: TextStyle(
-                          color: activeTheme['chat_icon_bg'],
-                        ),
-                      ),
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: entry.value.map((emote) {
-                            return GestureDetector(
-                              onTap: () {
-                                _messageController.text += '${emote.name} ';
-                                Navigator.pop(context);
-                                _messageFocusNode.requestFocus();
-                              },
-                              child: Tooltip(
-                                message: emote.name,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: activeTheme['chat_icon_bg']!,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  padding: const EdgeInsets.all(4),
-                                  child: Image.network(
-                                    emote.url2x,
-                                    width: 32,
-                                    height: 32,
-                                    errorBuilder: (context, error, stack) {
-                                      return SizedBox(
-                                        width: 32,
-                                        height: 32,
-                                        child: Center(
-                                          child: Text(
-                                            '?',
-                                            style: TextStyle(
-                                              color: activeTheme['chat_icon_bg'],
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  String _groupEmoteBySource(ChatEmote emote) {
-    // Infer group from URL or name
-    if (emote.url1x.contains('7tv.app')) {
-      return '7TV';
-    } else if (emote.url1x.contains('jtvnw.net')) {
-      return 'Twitch';
-    }
-    return 'Other';
-  }
-
   void _onDragUpdate(DragUpdateDetails details, double screenHeight) {
     // Map pointer position directly to panel height so the grabber follows
     // the finger/cursor without lag.
@@ -248,6 +144,8 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
     final activeTheme = themeState.theme;
     
     final isUserLoggedIn = ref.watch(chatLoginProvider);
+    final emotesAsync = ref.watch(emotesProvider);
+    final emotes = emotesAsync.whenData((data) => data).value ?? [];
 
     return AnimatedBuilder(
       animation: widget.slideAnimation,
@@ -425,17 +323,10 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                           suffixIcon: Focus(
                             canRequestFocus: false,
                             skipTraversal: true,
-                            child: IconButton(
-                              onPressed: () {
-                                final emotesAsyncValue = ref.read(sevenTVEmotesProvider);
-                                emotesAsyncValue.whenData((emotes) {
-                                  _showEmotePicker(context, emotes);
-                                });
-                              },
-                              icon: Icon(
-                                Icons.emoji_emotions_outlined,
-                                color: activeTheme['chat_icon_bg'],
-                              ),
+                            child: EmotesSelector(
+                              messageController: _messageController,
+                              messageFocusNode: _messageFocusNode,
+                              emotes: emotes,
                             ),
                           ),
                         ),
