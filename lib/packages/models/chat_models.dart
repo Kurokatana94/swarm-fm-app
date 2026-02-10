@@ -56,6 +56,7 @@ class ChatMessage {
 class SevenTVEmote {
   final String id;
   final String name;
+  final String ownerName;
   final int flags;
   final bool animated;
   final String url;
@@ -67,6 +68,7 @@ class SevenTVEmote {
   const SevenTVEmote({
     required this.id,
     required this.name,
+    this.ownerName = "7TV",
     required this.flags,
     required this.animated,
     required this.url,
@@ -92,6 +94,7 @@ class SevenTVEmote {
 
 class ChatEmote {
   final String name;
+  final String ownerName;
   final String url1x;
   final String url2x;
   final int width;
@@ -100,6 +103,7 @@ class ChatEmote {
 
   const ChatEmote({
     required this.name,
+    required this.ownerName,
     required this.url1x,
     required this.url2x,
     required this.width,
@@ -110,6 +114,7 @@ class ChatEmote {
   factory ChatEmote.fromSevenTV(SevenTVEmote emote) {
     return ChatEmote(
       name: emote.name,
+      ownerName: emote.ownerName,
       url1x: '${emote.url}/1x.webp',
       url2x: '${emote.url}/2x.webp',
       width: emote.width,
@@ -130,6 +135,7 @@ class ChatEmote {
 
     final id = json['id']?.toString() ?? '';
     final name = json['name']?.toString() ?? '';
+    final ownerName = json['owner_name']?.toString() ?? 'Unknown';
 
     String buildUrl(String scale) {
       return 'https://static-cdn.jtvnw.net/emoticons/v2/$id/$format/$theme/$scale';
@@ -137,6 +143,7 @@ class ChatEmote {
 
     return ChatEmote(
       name: name,
+      ownerName: ownerName,
       url1x: buildUrl(scale1x),
       url2x: buildUrl(scale2x),
       width: 28,

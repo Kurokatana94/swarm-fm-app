@@ -65,8 +65,12 @@ Future<void> main() async {
   final container = ProviderContainer();
   await container.read(chatLoginProvider.notifier).loadLoginState();
   
-  // Pre-load emotes in background
-  container.read(emotesProvider);
+  // Pre-load emotes synchronously before app starts
+  try {
+    await container.read(emoteInitializerProvider.future);
+  } catch (e) {
+    print('Error initializing emotes: $e');
+  }
 
   runApp(
     UncontrolledProviderScope(

@@ -20,7 +20,6 @@ class WebSocketEventHandler {
   WebSocketEventHandler(this.ref);
 
   void messagesHandler(Map<String, dynamic> data) async {
-    print('📨 WebSocket message received: $data');
     if (data['type'] == 'new_message') {
       final msg = data['message'];
       final message = ChatMessage(

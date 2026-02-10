@@ -47,85 +47,126 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
           builder: (context, setState) {
             final themeState = ref.watch(themeProvider);
             final activeTheme = themeState.theme;
+            final scrollController = ScrollController();
             
-            // Filter emotes by search query
             final filteredEmotes = emotes.where((e) => e.url1x.contains(targetGroup)).toList();
             
             return Container(
               height: MediaQuery.of(context).size.height * 0.7,
-              color: activeTheme['chat_icon_fg'],
+              color: activeTheme['chat_icon_fg'] ,
               child: Column(
                 children: [
-                  // Emote group selector
                   Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              targetGroup = 'jtvnw.net';
-                            });
-                          },
-                          child: Text('Twitch', style: TextStyle(color: activeTheme['chat_icon_bg'])),
+                    child: SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      // Define the buttons
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: 'jtvnw.net',
+                          label: Text('Twitch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              targetGroup = '7tv.app';
-                            });
-                          },
-                          child: Text('7TV', style: TextStyle(color: activeTheme['chat_icon_bg'])),
-                        )
+                        ButtonSegment<String>(
+                          value: '7tv.app',
+                          label: Text('7TV', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
                       ],
+                      
+                      // Logic to track which one is active
+                      selected: {targetGroup},
+                      
+                      // What happens when you click
+                      onSelectionChanged: (Set<String> newSelection) {
+                        setState(() {
+                          targetGroup = newSelection.first;
+                        });
+                        scrollController.jumpTo(0.0);
+                      },
+
+                      // Custom styling to match your theme
+                      style: SegmentedButton.styleFrom(
+                        backgroundColor: activeTheme['chat_icon_bg'],
+                        foregroundColor: activeTheme['chat_icon_fg'], // Text color
+                        selectedForegroundColor: activeTheme['chat_icon_bg'],        // Text color when active
+                        selectedBackgroundColor: activeTheme['chat_icon_fg'], // Fill color when active
+                        side: BorderSide(color: activeTheme['chat_icon_bg']!),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                     )
                   ),
                   const SizedBox(height: 8),
-                  // Emote grid
                   Expanded(
-                    child: GridView.builder(
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 6,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
-                      itemCount: filteredEmotes.length,
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: _groupTwitchEmotesByOwner(filteredEmotes).length,
                       itemBuilder: (context, index) {
-                        final emote = filteredEmotes[index];
-                        return GestureDetector(
-                          onTap: () {
-                            widget._messageController.text += '${emote.name} ';
-                            Navigator.pop(context);
-                            widget._messageFocusNode.requestFocus();
-                          },
-                          child: Tooltip(
-                            message: emote.name,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: activeTheme['chat_icon_bg']!.withOpacity(0.3),
+                        final entry = _groupTwitchEmotesByOwner(filteredEmotes).entries.elementAt(index);
+                        final onwerName = entry.key;
+                        final emotes = entry.value;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Text(
+                                "- $onwerName -",
+                                style: TextStyle(
+                                  color: activeTheme['chat_icon_bg'] ,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              padding: const EdgeInsets.all(4),
-                              child: Image.network(
-                                emote.url2x,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stack) {
-                                  return Center(
-                                    child: Text(
-                                      '?',
-                                      style: TextStyle(
-                                        color: activeTheme['chat_icon_bg'],
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  );
-                                },
                               ),
                             ),
-                          ),
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(16),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 6,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
+                              itemCount: emotes.length,
+                              itemBuilder: (context, emoteIndex) {
+                                final emote = emotes[emoteIndex] ;
+                                return GestureDetector(
+                                  onTap: () {
+                                    widget._messageController.text += '${emote.name} ';
+                                    Navigator.pop(context);
+                                    widget._messageFocusNode.requestFocus();
+                                  },
+                                  child: Tooltip(
+                                    message: emote.name,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: activeTheme['chat_icon_bg'],
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      padding: const EdgeInsets.all(4),
+                                      child: Image.network(
+                                        emote.url2x,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (context, error, stack) {
+                                          return Center(
+                                            child: Text(
+                                              '?',
+                                              style: TextStyle(
+                                                color: activeTheme['chat_icon_bg'] ,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         );
                       },
                     ),
@@ -139,14 +180,12 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
     );
   }
 
-  String _groupEmoteBySource(ChatEmote emote) {
-    // Infer group from URL or name
-    if (emote.url1x.contains('7tv.app')) {
-      return '7TV';
-    } else if (emote.url1x.contains('jtvnw.net')) {
-      print('Twitch emote detected: (${emote.url1x})');
-      return 'Twitch';
+  Map<String, List> _groupTwitchEmotesByOwner(List<ChatEmote> emotes) {
+    final Map<String, List<ChatEmote>> grouped = {};
+    for (final emote in emotes) {
+      grouped.putIfAbsent(emote.ownerName, () => []).add(emote);
     }
-    return 'Other';
+
+    return grouped;
   }
 }

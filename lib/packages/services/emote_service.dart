@@ -17,6 +17,7 @@ class EmoteService {
   ChatEmote _mapTwitchHelixEmote(
     Map<String, dynamic> json,
     String template,
+    {String ownerName = 'Unknown'}
   ) {
     final formats = (json['format'] as List?)?.map((e) => e.toString()).toList() ?? const [];
     final scales = (json['scale'] as List?)?.map((e) => e.toString()).toList() ?? const [];
@@ -40,6 +41,7 @@ class EmoteService {
 
     return ChatEmote(
       name: name,
+      ownerName: ownerName,
       url1x: buildUrl(scale1x),
       url2x: buildUrl(scale2x),
       width: 28,
@@ -123,8 +125,6 @@ class EmoteService {
         throw Exception('Unexpected Twitch emotes response');
       }
 
-
-
       return data.values
           .whereType<Map>()
           .map((emoteJson) => ChatEmote.fromTwitchUserEmote(
@@ -204,10 +204,7 @@ class EmoteService {
 
       return emotesData
           .whereType<Map>()
-          .map((emoteJson) => _mapTwitchHelixEmote(
-                Map<String, dynamic>.from(emoteJson),
-                template,
-              ))
+          .map((emoteJson) => _mapTwitchHelixEmote(Map<String, dynamic>.from(emoteJson), template, ownerName: 'Twitch',))
           .where((emote) => emote.name.isNotEmpty)
           .toList();
     } catch (e) {
@@ -218,13 +215,14 @@ class EmoteService {
   Future<List<ChatEmote>> getTwitchChannelEmotes(
     String clientId,
     String accessToken,
-    int broadcasterId,
+    int ownerId,
+    String ownerName,
   ) async {
     try {
       final response = await _dio.get(
         'https://api.twitch.tv/helix/chat/emotes',
         queryParameters: {
-          'broadcaster_id': broadcasterId,
+          'broadcaster_id': ownerId,
         },
         options: Options(
           headers: {
@@ -233,7 +231,6 @@ class EmoteService {
           },
         ),
       );
-
       if (response.statusCode != 200) {
         throw Exception('Failed to load Twitch channel emotes');
       }
@@ -246,17 +243,17 @@ class EmoteService {
         throw Exception('Unexpected Twitch channel emotes response');
       }
 
+      // print("=============================\n\nLOADED TWITCH USER EMOTES!!!:\n\n$data\n\n=============================");
+
       final template = data['template'].toString();
       final List<dynamic> emotesData = data['data'] as List<dynamic>;
-
+      
       return emotesData
           .whereType<Map>()
-          .map((emoteJson) => _mapTwitchHelixEmote(
-                Map<String, dynamic>.from(emoteJson),
-                template,
-              ))
+          .map((emoteJson) => _mapTwitchHelixEmote(Map<String, dynamic>.from(emoteJson), template, ownerName: ownerName))
           .where((emote) => emote.name.isNotEmpty)
           .toList();
+          
     } catch (e) {
       throw Exception('Failed to load Twitch channel emotes: ${_formatDioError(e)}');
     }

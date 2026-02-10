@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:swarm_fm_app/packages/models/chat_models.dart';
@@ -9,17 +10,32 @@ import 'dart:convert';
 // Emote Providers
 final emoteServiceProvider = Provider((ref) => EmoteService());
 
-// Cached emotes provider - loads from cache immediately, refreshes in background
-final emotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
+// Concrete StateNotifier for emote cache
+class EmoteCacheNotifier extends StateNotifier<List<ChatEmote>?> {
+  EmoteCacheNotifier() : super(null);
+  
+  void setEmotes(List<ChatEmote> emotes) {
+    state = emotes;
+  }
+}
+
+// In-memory cache for emotes to avoid repeated SharedPreferences calls
+final emoteCacheInMemory = StateNotifierProvider<EmoteCacheNotifier, List<ChatEmote>?>((ref) {
+  return EmoteCacheNotifier();
+});
+
+// Initialize emote cache on app startup
+final emoteInitializerProvider = FutureProvider<List<ChatEmote>>((ref) async {
   final prefs = await SharedPreferences.getInstance();
   final cached = prefs.getString('cached_emotes');
+  List<ChatEmote> emotes = [];
   
-  // Return cached emotes immediately if available
   if (cached != null) {
     try {
       final List<dynamic> decoded = jsonDecode(cached);
       final cachedEmotes = decoded.map((e) => ChatEmote(
         name: e['name'],
+        ownerName: e['ownerName'],
         url1x: e['url1x'],
         url2x: e['url2x'],
         width: e['width'],
@@ -27,7 +43,8 @@ final emotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
         zeroWidth: e['zeroWidth'],
       )).toList();
       
-      print('📦 Loaded ${cachedEmotes.length} emotes from cache');
+      emotes = cachedEmotes;
+      print('📦 Loaded ${cachedEmotes.length} emotes from cache into memory');
       
       // Fetch fresh emotes in background without blocking
       Future.microtask(() async {
@@ -38,34 +55,50 @@ final emotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
           print('Error refreshing emotes in background: $e');
         }
       });
-      
-      return cachedEmotes;
     } catch (e) {
       print('Error loading cached emotes: $e');
+      // Fetch fresh if cache is corrupted
+      emotes = await _fetchAndCacheEmotes(ref);
     }
+  } else {
+    // No cache, fetch normally
+    print('📦 No cache found, fetching emotes...');
+    emotes = await _fetchAndCacheEmotes(ref);
   }
   
-  // No cache, fetch normally
-  print('📦 No cache found, fetching emotes...');
-  return await _fetchAndCacheEmotes(ref);
+  // Store in memory cache
+  ref.read(emoteCacheInMemory.notifier).setEmotes(emotes);
+  return emotes;
+});
+
+// Cached emotes provider - returns from memory cache if available, otherwise initializes
+final emotesProvider = FutureProvider<List<ChatEmote>>((ref) async {
+  // Check if already initialized in memory
+  final inMemoryCache = ref.watch(emoteCacheInMemory);
+  if (inMemoryCache != null && inMemoryCache.isNotEmpty) {
+    return inMemoryCache;
+  }
+  
+  // Otherwise, initialize from disk
+  return await ref.watch(emoteInitializerProvider.future);
 });
 
 Future<List<ChatEmote>> _fetchAndCacheEmotes(Ref ref) async {
   final emoteService = ref.watch(emoteServiceProvider);
   final chatManager = ChatManager();
 
-  const twitchChannelIds = <int>[
-    85498365, // vedal987
-    56418014, // annytf
-    469632185, // camila
-    825937345, // Ellie_Minibot
-    852880224, // cerberVT
-    1004060561, // MinikoMew
-    32173571, // chrchie
-    99728740, // alexvoid
-    64140092, // LaynaLazar
-    542237669, // toma
-  ];
+  const twitchChannels = <String, int>{
+    'vedal987': 85498365, // vedal987
+    'annytf': 56418014, // annytf
+    'camila': 469632185, // camila
+    'Ellie_Minibot': 825937345, // Ellie_Minibot
+    'ceberVT': 852880224, // cerberVT
+    'MinikoMew': 1004060561, // MinikoMew
+    'chrchie': 32173571, // chrchie
+    'alexvoid': 99728740, // alexvoid
+    'LaynaLazar': 64140092, // LaynaLazar
+    'toma': 542237669, // toma
+  };
 
   const emoteSets = {
     'vedal': "01GN2QZDS0000BKRM8E4JJD3NV",
@@ -87,23 +120,24 @@ Future<List<ChatEmote>> _fetchAndCacheEmotes(Ref ref) async {
         twitchClientSecret,
       );
 
+      for (final channel in twitchChannels.entries) {
+        final channelEmotes = await emoteService.getTwitchChannelEmotes(
+          twitchClientId,
+          appToken,
+          channel.value,
+          channel.key,
+        );
+        for (final emote in channelEmotes) {
+          mergedEmotes[emote.name] = emote;
+        }
+      }
+
       final globalEmotes = await emoteService.getTwitchGlobalEmotes(
         twitchClientId,
         appToken,
       );
       for (final emote in globalEmotes) {
         mergedEmotes[emote.name] = emote;
-      }
-
-      for (final channelId in twitchChannelIds) {
-        final channelEmotes = await emoteService.getTwitchChannelEmotes(
-          twitchClientId,
-          appToken,
-          channelId,
-        );
-        for (final emote in channelEmotes) {
-          mergedEmotes[emote.name] = emote;
-        }
       }
     } catch (e) {
       print('Error loading Twitch app emotes: $e');
@@ -312,6 +346,5 @@ class ChatScrollNotifier extends StateNotifier<double> {
     }
   }
 
-  double get maxScrollExtent => _controller?.position.maxScrollExtent ?? 0.0;
+  double get maxScrollExtent => (_controller?.hasClients ?? false) ? _controller!.position.maxScrollExtent : 0.0;
 }
-
