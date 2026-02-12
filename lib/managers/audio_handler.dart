@@ -37,8 +37,6 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     // Broadcast player state to AudioService (updates notification state)------------------------------------------------
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    if (activeAudioService.value == "HLS") _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
-
     // Keeps the player screen on ------------------------------------------------
     _player.playingStream.listen((isPlaying) {
       if (isPlaying) {
@@ -84,6 +82,15 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     // Show default info immediately
     mediaItem.add(_defaultItem);
     _localMetadata = await loadLocalMetadata();
+
+    if (activeAudioService.value == "SHUFFLE") {
+      final url = await _getRandomSongUrl();
+      await _player.setAudioSource(
+        AudioSource.uri(Uri.parse(url)),
+        preload: false,
+      );
+      return;
+    }
 
     // First fetch
     await _refreshMetadata();
@@ -183,7 +190,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
         await _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
       }
 
-      await _player.play();
+      _player.play();
       print('Playback started successfully');
     } catch (e, stackTrace) {
       print('Error in play(): $e');
