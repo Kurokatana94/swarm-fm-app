@@ -35,12 +35,12 @@ final emoteInitializerProvider = FutureProvider<List<ChatEmote>>((ref) async {
       final List<dynamic> decoded = jsonDecode(cached);
       final cachedEmotes = decoded.map((e) => ChatEmote(
         name: e['name'],
-        ownerName: e['ownerName'],
+        ownerName: e['ownerName'] ?? 'Unknown',
         url1x: e['url1x'],
         url2x: e['url2x'],
         width: e['width'],
         height: e['height'],
-        zeroWidth: e['zeroWidth'],
+        zeroWidth: e['zeroWidth'] ?? false,
       )).toList();
       
       emotes = cachedEmotes;
@@ -174,6 +174,7 @@ Future<List<ChatEmote>> _fetchAndCacheEmotes(Ref ref) async {
     final prefs = await SharedPreferences.getInstance();
     final cacheData = emoteList.map((e) => {
       'name': e.name,
+      'ownerName': e.ownerName,
       'url1x': e.url1x,
       'url2x': e.url2x,
       'width': e.width,

@@ -8,7 +8,7 @@ class EmotesSelector extends ConsumerStatefulWidget {
   final FocusNode _messageFocusNode;
   final List<ChatEmote> _emotes;
 
-  EmotesSelector({
+  const EmotesSelector({
     super.key,
     required TextEditingController messageController,
     required FocusNode messageFocusNode,
@@ -24,7 +24,6 @@ class EmotesSelector extends ConsumerStatefulWidget {
 class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
   String targetGroup = 'jtvnw.net'; // Default to Twitch emotes
 
-  // TODO - Separate emotes into groups (Twitch, 7TV, etc) to allow filtering in picker and sort by account provider
   @override
   Widget build(BuildContext context) {
     final themeState = ref.watch(themeProvider);
@@ -38,7 +37,8 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
     );
   }
 
-  void _showEmoteSelector(BuildContext context, List<ChatEmote> emotes) {  
+  // Shows the emote selector window
+  void _showEmoteSelector(BuildContext context, List<ChatEmote> emotes) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -60,7 +60,7 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
                     padding: const EdgeInsets.all(16),
                     child: SegmentedButton<String>(
                       showSelectedIcon: false,
-                      // Define the buttons
+
                       segments: const [
                         ButtonSegment<String>(
                           value: 'jtvnw.net',
@@ -72,10 +72,7 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
                         ),
                       ],
                       
-                      // Logic to track which one is active
                       selected: {targetGroup},
-                      
-                      // What happens when you click
                       onSelectionChanged: (Set<String> newSelection) {
                         setState(() {
                           targetGroup = newSelection.first;
@@ -83,12 +80,11 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
                         scrollController.jumpTo(0.0);
                       },
 
-                      // Custom styling to match your theme
                       style: SegmentedButton.styleFrom(
                         backgroundColor: activeTheme['chat_icon_bg'],
-                        foregroundColor: activeTheme['chat_icon_fg'], // Text color
-                        selectedForegroundColor: activeTheme['chat_icon_bg'],        // Text color when active
-                        selectedBackgroundColor: activeTheme['chat_icon_fg'], // Fill color when active
+                        foregroundColor: activeTheme['chat_icon_fg'],
+                        selectedForegroundColor: activeTheme['chat_icon_bg'],
+                        selectedBackgroundColor: activeTheme['chat_icon_fg'],
                         side: BorderSide(color: activeTheme['chat_icon_bg']!),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
@@ -180,6 +176,7 @@ class _EmotesSelectorState extends ConsumerState<EmotesSelector> {
     );
   }
 
+  // Helper function to group Twitch emotes by owner
   Map<String, List> _groupTwitchEmotesByOwner(List<ChatEmote> emotes) {
     final Map<String, List<ChatEmote>> grouped = {};
     for (final emote in emotes) {

@@ -258,7 +258,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
           ListTile(
             leading: IgnorePointer(
               child: Switch(
-                value: activeAudioService == "HLS",
+                value: activeAudioService.value == "HLS",
                 inactiveThumbColor: activeTheme['settings_text'],
                 activeThumbColor: activeTheme['settings_bg'],
                 activeTrackColor: activeTheme['settings_text'],
@@ -269,8 +269,8 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
             title: Text('HLS', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
             onTap: () {
               setState(() {
-                activeAudioService = "HLS";
-                saveAudioServiceState(activeAudioService);
+                activeAudioService.value = "HLS";
+                saveAudioServiceState(activeAudioService.value);
               });
             },
           ),
@@ -278,7 +278,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
           ListTile(
             leading: IgnorePointer(
               child: Switch(
-                value: activeAudioService == "SHUFFLE",
+                value: activeAudioService.value == "SHUFFLE",
                 inactiveThumbColor: activeTheme['settings_text'],
                 activeThumbColor: activeTheme['settings_bg'],
                 activeTrackColor: activeTheme['settings_text'],
@@ -289,8 +289,8 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
             title: Text('Shuffle', style: TextStyle(color: activeTheme['settings_text'], fontSize: 18)),
             onTap: () {
               setState(() {
-                activeAudioService = "SHUFFLE";
-                saveAudioServiceState(activeAudioService);
+                activeAudioService.value = "SHUFFLE";
+                saveAudioServiceState(activeAudioService.value);
               });
             },
           ),

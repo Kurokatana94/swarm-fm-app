@@ -539,6 +539,7 @@ class _SwarmFMPlayerPageState extends ConsumerState<SwarmFMPlayerPage>
                                     }
                                     return CircularProgressIndicator(
                                       color: activeTheme['player_controls'],
+                                      padding: EdgeInsets.all(22),
                                     );
                                   },
                                 ),

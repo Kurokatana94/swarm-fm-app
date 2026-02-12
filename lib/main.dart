@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:audio_service/audio_service.dart';
@@ -20,7 +19,7 @@ bool isNeuroTheme = true;
 bool isEvilTheme = false;
 bool isVedalTheme = false;
 
-String activeAudioService = "HLS";
+ValueNotifier<String> activeAudioService = ValueNotifier("HLS");
 
 bool isHls = true;
 bool isShuffle = false;
@@ -65,12 +64,8 @@ Future<void> main() async {
   final container = ProviderContainer();
   await container.read(chatLoginProvider.notifier).loadLoginState();
   
-  // Pre-load emotes synchronously before app starts
-  try {
-    await container.read(emoteInitializerProvider.future);
-  } catch (e) {
-    print('Error initializing emotes: $e');
-  }
+  // Load emotes asynchronously in background (don't block app startup)
+  container.read(emoteInitializerProvider);
 
   runApp(
     UncontrolledProviderScope(
@@ -168,12 +163,6 @@ void changeTheme(String themeName) {
   }
 }
 
-// It simply returns the active stream url, but in future might change depending on how the system evolves ------------------------------------------------
-String getStreamUrl() {
-  final randomInt = Random().nextInt(1047) + 1;
-  return activeAudioService == "HLS" ? 'https://stream.sw.arm.fm/new/hls_audio.m3u8' : 'https://swarmfm.boopdev.com/assets/music/$randomInt.mp3'; //TODO NEW DATA FROM HERE --> https://swarmfm-assets.boopdev.com/music/HASHED_CODE_HERE.mp3
-}
-
 // Themes saving ------------------------------------------------
 Future<void> saveThemeState(String themeName, bool isNeuro, bool isEvil, bool isVedal) async {
   final prefs = await SharedPreferences.getInstance();
@@ -206,9 +195,9 @@ Future<void> saveAudioServiceState(String audioService) async {
 Future<void> loadAudioServiceState() async {
   final prefs = await SharedPreferences.getInstance();
 
-  activeAudioService = prefs.getString('activeAudioService') ?? 'HLS';
+  activeAudioService.value = prefs.getString('activeAudioService') ?? 'HLS';
 
-  isHls = activeAudioService == "HLS";
+  isHls = activeAudioService.value == "HLS";
 }
 
 Future<void> _loadPrefsStates() async {

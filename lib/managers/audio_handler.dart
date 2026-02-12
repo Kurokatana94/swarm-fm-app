@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:swarm_fm_app/main.dart';
@@ -10,27 +11,39 @@ import 'package:swarm_fm_app/managers/song_data_fetcher.dart';
 class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
 
   final _player = AudioPlayer();
-  Timer? _metadataTimer;
+  late List<Map<String, dynamic>> _localMetadata = [];
+  // Active Stream URL (might change with time)
+  final String _STREAM_URL = 'https://stream.sw.arm.fm/new/hls_audio.m3u8';
 
+  Timer? _metadataTimer;
+  SongData? _sampleSongData;
+  SongData? _currentLiveSongData;
+  int _pollingCounter = 0;
+
+  SongData? _currentShuffledSongData;
+
+  bool _isTransitioning = false;
+
+  // TODO - MODIFY TO COMPLY WITH SHUFFLE MODE
   MediaItem get _defaultItem => MediaItem(
-    id: getStreamUrl(),
+    id: _STREAM_URL,
     title: "Swarm FM",
-    artist: "",   
+    artist: "",
   );
 
   AudioPlayerHandler() {
-    _initMetadata();
+    _initLiveMetadata();
 
     // Broadcast player state to AudioService (updates notification state)------------------------------------------------
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    if (activeAudioService == "HLS") _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
+    if (activeAudioService.value == "HLS") _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
 
     // Keeps the player screen on ------------------------------------------------
     _player.playingStream.listen((isPlaying) {
       if (isPlaying) {
         WakelockPlus.enable();
-        _metadataTimer = Timer.periodic(Duration(seconds: 20), (_) async => await _refreshMetadata());
+        _metadataTimer = Timer.periodic(Duration(seconds: _getPollingInterval()), (_) async => await _refreshMetadata());
       } else {
         WakelockPlus.disable();
         _metadataTimer?.cancel();
@@ -39,14 +52,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     
     // Listen for idle/failure states and auto-restart ------------------------------------------------
     _player.playerStateStream.listen((playerState) async {
-      if (playerState.processingState == ProcessingState.completed) {
-        if (activeAudioService == "HLS") {
-          await _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
-          await _player.play();
-          
-          return;
-        }
-        
+      if (playerState.processingState == ProcessingState.completed && !_isTransitioning) {
         await play();
       }
     });
@@ -57,7 +63,9 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
         print('Playback error: $e');
         while(!_player.playing){
           try {
-            activeAudioService == "HLS" ? await _player.setUrl(getStreamUrl(), preload: false) : await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
+            activeAudioService.value == "HLS" 
+              ? await _player.setUrl(_STREAM_URL, preload: false) 
+              : await _player.setAudioSource(AudioSource.uri(Uri.parse(await _getRandomSongUrl())));
             await _player.play();
           } catch (e) {
             await Future.delayed(const Duration(seconds: 1));
@@ -66,24 +74,35 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
         }
       }
     );
+    
+    activeAudioService.addListener(() async {
+      if (_player.playing) await play();
+    });
   }
 
-  Future<void> _initMetadata() async {
+  Future<void> _initLiveMetadata() async {
     // Show default info immediately
     mediaItem.add(_defaultItem);
+    _localMetadata = await loadLocalMetadata();
 
     // First fetch
     await _refreshMetadata();
   }
 
-  Future<void> _refreshMetadata() async {
+  Future<void> _refreshMetadata({bool isForced = false}) async {
     try {
-      SongData songData = await fetchSongData();
-
+      if (!isForced) _currentLiveSongData = await fetchSongData();
+      
       final newItem = MediaItem(
-        id: getStreamUrl(),
-        title: songData.title,
-        artist: "${songData.artist} ft. ${songData.singers.join(', ').toTitleCase}",
+        id: activeAudioService.value == "HLS" 
+          ? _STREAM_URL
+          : _formattedShuffleUrl(),
+        title: activeAudioService.value == "HLS"
+          ? _currentLiveSongData!.name
+          : _currentShuffledSongData!.name,
+        artist: activeAudioService.value == "HLS" 
+          ? "${_currentLiveSongData!.artist} ft. ${_currentLiveSongData!.singer.join(', ').toTitleCase}"
+          : "${_currentShuffledSongData!.artist} ft. ${_currentShuffledSongData!.singer.join(', ').toTitleCase}",
       );
 
       mediaItem.add(newItem);
@@ -92,16 +111,86 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
+  Future<String> _getRandomSongUrl() async {
+    _localMetadata = await loadLocalMetadata();
+    print('!!!!!!!!! Loaded ${_localMetadata.length} songs from local metadata. !!!!!!!!!');
+    
+    final fetchedSongData = _localMetadata[Random().nextInt(_localMetadata.length)];
+    _currentShuffledSongData = SongData(
+      id: fetchedSongData['id'],
+      name: fetchedSongData['name'],
+      artist: fetchedSongData['artist'],
+      singer: fetchedSongData['singer'],
+      duration: fetchedSongData['duration']);
+    
+    await _refreshMetadata(isForced: true);
+
+    return _formattedShuffleUrl();
+  }
+
+  String _formattedShuffleUrl() {
+    return 'https://swarmfm-assets.boopdev.com/music/${_currentShuffledSongData!.id}.mp3';
+  }
+
+  // Determines the polling interval for live metadata updates based on the current song's duration and finds the song start within the first to songs streamed ------------------------------------------------
+  int _getPollingInterval() {
+    try {
+      int duration;
+      _sampleSongData ??= _currentLiveSongData;
+
+      if (_currentLiveSongData != _sampleSongData && _pollingCounter <= 2) {
+        _sampleSongData = _currentLiveSongData;
+        _pollingCounter++;
+      }
+      
+      switch (_pollingCounter) {
+        case 0:
+          duration = 15;
+          break;
+        case 1:
+          duration = _currentLiveSongData!.duration - 15;
+          _pollingCounter++;
+          break;
+        case 2:
+          duration = 1;
+          break;
+        default:
+          duration = _currentLiveSongData!.duration;
+      }
+
+      return duration;
+    } catch (e) {
+      return 20;
+    }
+  }
+
   // Controls ------------------------------------------------
   @override
   Future<void> play() async {
-    if (activeAudioService == "SHUFFLE") {
-      mediaItem.add(_defaultItem);
-      await _player.setAudioSource(AudioSource.uri(Uri.parse(getStreamUrl())));
-    } else {
-      await _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
+    // Prevent concurrent play() calls
+    if (_isTransitioning) return;
+    
+    _isTransitioning = true;
+
+    try {      
+      if (_player.processingState == ProcessingState.completed || _player.playing) {
+        await _player.stop();
+      }
+      
+      if (activeAudioService.value == "SHUFFLE") {
+        await _player.setAudioSource(AudioSource.uri(Uri.parse(await _getRandomSongUrl())));
+      } else {
+        await _player.setAudioSource(AudioSource.uri(Uri.parse(_defaultItem.id)));
+      }
+
+      await _player.play();
+      print('Playback started successfully');
+    } catch (e, stackTrace) {
+      print('Error in play(): $e');
+      print('Stack trace: $stackTrace');
+    } finally {
+      _isTransitioning = false;
     }
-    await _player.play();
   }
 
   @override
