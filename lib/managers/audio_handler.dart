@@ -19,12 +19,13 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   SongData? _sampleSongData;
   SongData? _currentLiveSongData;
   int _pollingCounter = 0;
+  bool _isPollSyncCheck = false;
 
   SongData? _currentShuffledSongData;
 
   bool _isTransitioning = false;
+  bool _isRefreshingMetadata = false;
 
-  // TODO - MODIFY TO COMPLY WITH SHUFFLE MODE
   MediaItem get _defaultItem => MediaItem(
     id: _STREAM_URL,
     title: "Swarm FM",
@@ -41,10 +42,11 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
     _player.playingStream.listen((isPlaying) {
       if (isPlaying) {
         WakelockPlus.enable();
-        _metadataTimer = Timer.periodic(Duration(seconds: _getPollingInterval()), (_) async => await _refreshMetadata());
+        _restartMetadataTimer();
       } else {
         WakelockPlus.disable();
         _metadataTimer?.cancel();
+        _resetPolling();
       }
     });
     
@@ -97,9 +99,19 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
   }
 
   Future<void> _refreshMetadata({bool isForced = false}) async {
+    if (_isRefreshingMetadata) return;
+    _isRefreshingMetadata = true;
+
     try {
+      print('!!!!!! Fetching song data... !!!!!!');
       if (!isForced) _currentLiveSongData = await fetchSongData();
       
+      if (_isPollSyncCheck && _currentLiveSongData!.id != _sampleSongData?.id) {
+        print('Current live song: ${_currentLiveSongData!.name} | Sample song: ${_sampleSongData!.name}');
+        print('!!!!!! Detected desync between song data and stream. Resetting polling counter to resync. !!!!!!');
+        _resetPolling();
+      }
+
       final newItem = MediaItem(
         id: activeAudioService.value == "HLS" 
           ? _STREAM_URL
@@ -112,10 +124,22 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
           : "${_currentShuffledSongData!.artist} ft. ${_currentShuffledSongData!.singer.join(', ').toTitleCase}",
       );
 
+      _restartMetadataTimer();
+
       mediaItem.add(newItem);
     } catch (e) {
       print('Failed to fetch song data: $e');
+    } finally {
+      _isRefreshingMetadata = false;
     }
+  }
+
+  void _restartMetadataTimer() {
+    _metadataTimer?.cancel();
+    _metadataTimer = Timer.periodic(
+      Duration(seconds: _getPollingInterval()),
+      (_) async => await _refreshMetadata(),
+    );
   }
 
   Future<String> _getRandomSongUrl() async {
@@ -145,7 +169,7 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
       int duration;
       _sampleSongData ??= _currentLiveSongData;
 
-      if (_currentLiveSongData != _sampleSongData && _pollingCounter <= 2) {
+      if (_currentLiveSongData?.id != _sampleSongData?.id && _pollingCounter <= 2) {
         _sampleSongData = _currentLiveSongData;
         _pollingCounter++;
       }
@@ -162,13 +186,21 @@ class AudioPlayerHandler extends BaseAudioHandler with SeekHandler {
           duration = 1;
           break;
         default:
-          duration = _currentLiveSongData!.duration;
+          duration = !_isPollSyncCheck ? _currentLiveSongData!.duration-15 : 15;
+          _isPollSyncCheck = !_isPollSyncCheck;
       }
-
+      print("Polling counter: $_pollingCounter");
       return duration;
     } catch (e) {
+      print(e);
       return 20;
     }
+  }
+
+  void _resetPolling() {
+    _sampleSongData = null;
+    _pollingCounter = 0;
+    _isPollSyncCheck = false;
   }
 
   // Controls ------------------------------------------------
